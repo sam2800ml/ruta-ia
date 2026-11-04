@@ -8,7 +8,11 @@ export type Doc = { id: string; name: string; doc_type: string; size_bytes: numb
   status: "uploaded" | "processing" | "processed" | "error"; error: string | null };
 export type Options = { sectors: string[]; sizes: string[]; document_types: Record<string, string> };
 
+import { demoBlob, demoRequest } from "./demo";
+
 const API_BASE = import.meta.env.VITE_API_URL || "/api";
+export const DEMO = import.meta.env.VITE_DEMO === "true";
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 let token: string | null = sessionStorage.getItem("token");
 let role: string | null = sessionStorage.getItem("role");
@@ -24,6 +28,10 @@ export const setViewAs = (id: string | null) => { viewAs = id; };
 export const getViewAs = () => viewAs;
 
 export async function http<T = any>(method: string, path: string, body?: unknown): Promise<T> {
+  if (DEMO) {
+    await sleep(200 + Math.random() * 200);
+    return structuredClone(demoRequest(method, path, body));
+  }
   const headers = new Headers();
   if (token) headers.set("Authorization", `Bearer ${token}`);
   if (viewAs) headers.set("X-View-As-Company", viewAs);
@@ -39,6 +47,12 @@ export async function http<T = any>(method: string, path: string, body?: unknown
 }
 
 export async function download(path: string, filename: string) {
+  if (DEMO) {
+    await sleep(200);
+    const url = URL.createObjectURL(demoBlob(path));
+    const a = document.createElement("a"); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url);
+    return;
+  }
   const headers = new Headers();
   if (token) headers.set("Authorization", `Bearer ${token}`);
   if (viewAs) headers.set("X-View-As-Company", viewAs);

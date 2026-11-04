@@ -3,13 +3,14 @@ import { ReactNode } from "react";
 export type NavItem = { key: string; label: string };
 
 export default function Shell({
-  brandSub, nav, active, onSelect, onLogout, children,
+  brandSub, nav, active, onSelect, onLogout, extra, children,
 }: {
   brandSub: string;
   nav: NavItem[];
   active: string;
   onSelect: (key: string) => void;
   onLogout: () => void;
+  extra?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -24,6 +25,7 @@ export default function Shell({
             <button key={n.key} className={n.key === active ? "on" : ""} onClick={() => onSelect(n.key)}>{n.label}</button>
           ))}
         </nav>
+        {extra}
         <button className="link logout" onClick={onLogout}>Salir</button>
       </aside>
       <main className="shell-main">{children}</main>

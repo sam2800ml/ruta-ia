@@ -1,6 +1,6 @@
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { api, getRole, hasToken, setSession, setViewAs } from "./api";
+import { api, DEMO, getRole, hasToken, setSession, setViewAs } from "./api";
 import Shell, { NavItem } from "./Shell";
 import Inicio from "./Inicio";
 import Login from "./Login";
@@ -37,33 +37,39 @@ function CompanyContent({ tab, readOnly, companyId, onGo }: { tab: string; readO
   return <Inicio onGo={onGo} />;
 }
 
+const DemoBadge = () => DEMO ? <p className="demo-badge">Modo demostración · datos de ejemplo, sin conexión a un backend real</p> : null;
+
 function App() {
-  const [auth, setAuth] = useState(hasToken());
+  const [auth, setAuth] = useState(DEMO || hasToken());
   const [companyTab, setCompanyTab] = useState("Inicio");
   const [companyName, setCompanyName] = useState("");
   const [consultantTab, setConsultantTab] = useState("Empresas");
   const [view, setView] = useState<{ id: string; name: string } | null>(null);
   const [viewTab, setViewTab] = useState("Inicio");
+  const [demoRole, setDemoRole] = useState<"company_user" | "consultant">("company_user");
 
-  const role = getRole();
+  const role = DEMO ? demoRole : getRole();
   const isConsultant = role === "consultant";
 
   useEffect(() => {
     if (auth && !isConsultant) api.profile().then(({ profile }) => setCompanyName(profile.name)).catch(() => {});
   }, [auth, isConsultant]);
 
-  const survey = new URLSearchParams(location.search).get("encuesta");
-  const inv = new URLSearchParams(location.search).get("invitacion");
-  if (survey) return <Survey token={survey} />;
-  if (inv && !auth) return <Invitation token={inv} onDone={() => setAuth(true)} />;
+  if (!DEMO) {
+    const survey = new URLSearchParams(location.search).get("encuesta");
+    const inv = new URLSearchParams(location.search).get("invitacion");
+    if (survey) return <Survey token={survey} />;
+    if (inv && !auth) return <Invitation token={inv} onDone={() => setAuth(true)} />;
+  }
   if (!auth) return <Login onDone={() => setAuth(true)} />;
 
   const logout = () => { setSession(null); setAuth(false); };
 
   if (!isConsultant) {
+    const extra = DEMO ? <button className="link demo-switch" onClick={() => setDemoRole("consultant")}>Vista superadministrador</button> : undefined;
     return (
-      <Shell brandSub={companyName} nav={COMPANY_NAV} active={companyTab} onSelect={setCompanyTab} onLogout={logout}>
-        <CompanyContent tab={companyTab} readOnly={false} onGo={setCompanyTab} />
+      <Shell brandSub={companyName} nav={COMPANY_NAV} active={companyTab} onSelect={setCompanyTab} onLogout={logout} extra={extra}>
+        <DemoBadge /><CompanyContent tab={companyTab} readOnly={false} onGo={setCompanyTab} />
       </Shell>
     );
   }
@@ -73,13 +79,15 @@ function App() {
     return (
       <Shell brandSub={`${view.name} · solo lectura`} nav={exitNav} active={viewTab} onLogout={logout}
         onSelect={(k) => (k === "__exit" ? (setViewAs(null), setView(null)) : setViewTab(k))}>
-        <CompanyContent tab={viewTab} readOnly companyId={view.id} onGo={setViewTab} />
+        <DemoBadge /><CompanyContent tab={viewTab} readOnly companyId={view.id} onGo={setViewTab} />
       </Shell>
     );
   }
 
+  const extra = DEMO ? <button className="link demo-switch" onClick={() => setDemoRole("company_user")}>Ver como empresa</button> : undefined;
   return (
-    <Shell brandSub="Superadministrador" nav={CONSULTANT_NAV} active={consultantTab} onSelect={setConsultantTab} onLogout={logout}>
+    <Shell brandSub="Superadministrador" nav={CONSULTANT_NAV} active={consultantTab} onSelect={setConsultantTab} onLogout={logout} extra={extra}>
+      <DemoBadge />
       {consultantTab === "Empresas" && <Empresas onView={(id, name) => { setView({ id, name }); setViewTab("Inicio"); }} />}
       {consultantTab === "Revisión" && <Revision />}
       {consultantTab === "Banco de preguntas" && <Banco />}

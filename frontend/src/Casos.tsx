@@ -9,7 +9,7 @@ const empty = { name: "", area: "", risk: "limitado", indicator: "", baseline: "
 function Matrix({ cases, onPick }: { cases: any[]; onPick: (id: string) => void }) {
   const W = 420, H = 320, m = 40;
   const x = (c: number) => m + ((c - 1) / 4) * (W - 2 * m);
-  const y = (i: number) => H - m - ((i - 1) / 3) * (H - 2 * m);
+  const y = (i: number) => H - m - ((i - 1) / 4) * (H - 2 * m);
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="matrix" role="img" aria-label="Matriz impacto contra complejidad">
       <rect x={m} y={m} width={(W - 2 * m) / 2} height={(H - 2 * m) / 2} className="z-win" />

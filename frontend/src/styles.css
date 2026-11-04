@@ -112,3 +112,5 @@ tbody tr:last-child td{border-bottom:0}
 .finding.fortaleza .tag{background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:99px}
 .finding.contradiccion .tag{background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:99px}
 .kpis div{background:var(--card)}
+.demo-badge{background:#fef3c7;color:#92400e;padding:.5rem .9rem;border-radius:8px;font-size:.85rem;margin-bottom:1rem}
+.demo-switch{color:rgba(255,255,255,.75);text-align:left;padding:.5rem .7rem;font-size:.85rem}

@@ -32,9 +32,11 @@ jobs:
         working-directory: frontend
         env:
           VITE_BASE: /${{ github.event.repository.name }}/
-          # Define esta variable en Settings -> Secrets and variables -> Actions -> Variables
-          # con la URL pública de tu backend (ej. https://tu-backend.onrender.com/api).
-          # Mientras no exista, el sitio se publica igual pero sin poder llamar a la API.
+          # Modo demo: sin backend, la app usa datos de ejemplo generados en el navegador.
+          # Cuando despliegues un backend real, pon VITE_DEMO en "false" aquí y define
+          # VITE_API_URL en Settings -> Secrets and variables -> Actions -> Variables
+          # con la URL pública de ese backend (ej. https://tu-backend.onrender.com/api).
+          VITE_DEMO: "true"
           VITE_API_URL: ${{ vars.VITE_API_URL }}
         run: npm run build
       - uses: actions/upload-pages-artifact@v3
