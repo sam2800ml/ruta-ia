@@ -8,7 +8,7 @@ export type Doc = { id: string; name: string; doc_type: string; size_bytes: numb
   status: "uploaded" | "processing" | "processed" | "error"; error: string | null };
 export type Options = { sectors: string[]; sizes: string[]; document_types: Record<string, string> };
 
-const API_BASE = import.meta.env.VITE_API_URL ?? "/api";
+const API_BASE = import.meta.env.VITE_API_URL || "/api";
 
 let token: string | null = sessionStorage.getItem("token");
 let role: string | null = sessionStorage.getItem("role");
