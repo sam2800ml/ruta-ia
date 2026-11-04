@@ -1,0 +1,20 @@
+Metadata-Version: 2.4
+Name: ruta-ia-backend
+Version: 0.1.0
+Requires-Python: >=3.12
+Requires-Dist: fastapi
+Requires-Dist: uvicorn
+Requires-Dist: sqlalchemy>=2
+Requires-Dist: psycopg[binary]
+Requires-Dist: pydantic>=2
+Requires-Dist: pydantic-settings
+Requires-Dist: argon2-cffi
+Requires-Dist: pyjwt
+Requires-Dist: email-validator
+Requires-Dist: python-multipart
+Requires-Dist: reportlab
+Requires-Dist: python-docx
+Requires-Dist: pypdf
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: httpx; extra == "dev"

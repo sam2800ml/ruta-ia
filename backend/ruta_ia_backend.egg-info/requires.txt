@@ -1,0 +1,17 @@
+fastapi
+uvicorn
+sqlalchemy>=2
+psycopg[binary]
+pydantic>=2
+pydantic-settings
+argon2-cffi
+pyjwt
+email-validator
+python-multipart
+reportlab
+python-docx
+pypdf
+
+[dev]
+pytest
+httpx
