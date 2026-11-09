@@ -32,12 +32,10 @@ jobs:
         working-directory: frontend
         env:
           VITE_BASE: /${{ github.event.repository.name }}/
-          # Modo demo: sin backend, la app usa datos de ejemplo generados en el navegador.
-          # Cuando despliegues un backend real, pon VITE_DEMO en "false" aquí y define
-          # VITE_API_URL en Settings -> Secrets and variables -> Actions -> Variables
-          # con la URL pública de ese backend (ej. https://tu-backend.onrender.com/api).
-          VITE_DEMO: "true"
-          VITE_API_URL: ${{ vars.VITE_API_URL }}
+          # Backend real en Render. Si alguna vez quieres volver al modo demo (sin backend),
+          # pon VITE_DEMO en "true" y borra/ignora VITE_API_URL.
+          VITE_DEMO: "false"
+          VITE_API_URL: https://ruta-ia-hvz4.onrender.com
         run: npm run build
       - uses: actions/upload-pages-artifact@v3
         with:

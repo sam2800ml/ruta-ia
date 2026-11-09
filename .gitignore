@@ -5,3 +5,4 @@ node_modules/
 .venv/
 frontend/dist/
 backend/storage/
+*.egg-info/
