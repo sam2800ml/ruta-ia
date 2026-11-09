@@ -41,7 +41,7 @@ export async function http<T = any>(method: string, path: string, body?: unknown
   const r = await fetch(`${API_BASE}${path}`, { method, headers, body: payload });
   if (!r.ok) {
     const d = await r.json().catch(() => ({}));
-    throw new Error(typeof d.detail === "string" ? d.detail : "Algo salió mal");
+    throw new Error(typeof d.detail === "string" ? d.detail : "Algo salió mal.,");
   }
   return r.json();
 }
