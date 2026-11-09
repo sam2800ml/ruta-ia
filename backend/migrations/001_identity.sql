@@ -85,7 +85,7 @@ CREATE POLICY audit_insert ON audit_log FOR INSERT
 -- Rol de la aplicación: sin BYPASSRLS, sin ser dueño de las tablas.
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ruta_app') THEN
-    CREATE ROLE ruta_app LOGIN PASSWORD 'ruta_app' NOBYPASSRLS NOSUPERUSER;
+    CREATE ROLE ruta_app LOGIN PASSWORD 'RutaApp2026!Segura' NOBYPASSRLS NOSUPERUSER;
   END IF;
 END $$;
 GRANT USAGE ON SCHEMA public TO ruta_app;

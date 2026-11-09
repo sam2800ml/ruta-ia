@@ -16,7 +16,7 @@ services:
   backend:
     build: ./backend
     environment:
-      RUTA_DATABASE_URL: postgresql+psycopg://ruta_app:ruta_app@db:5432/ruta
+      RUTA_DATABASE_URL: postgresql+psycopg://ruta_app:RutaApp2026!Segura@db:5432/ruta
       RUTA_ADMIN_DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/ruta
       RUTA_CORS_ORIGINS: http://localhost:8080
     ports: ["8000:8000"]
