@@ -2,6 +2,12 @@ import { ReactNode } from "react";
 
 export const PILLARS = ["strategy", "infrastructure", "data", "governance", "talent", "culture"];
 
+export function Spinner() { return <span className="spinner" aria-hidden="true" />; }
+
+export function Loading({ text = "Cargando…" }: { text?: string }) {
+  return <p className="loading" role="status"><Spinner /> {text}</p>;
+}
+
 export function Radar({ scores }: { scores: { label: string; score: number }[] }) {
   const n = scores.length, R = 90, cx = 130, cy = 120;
   const pt = (i: number, v: number) => { const a = (Math.PI * 2 * i) / n - Math.PI / 2; return [cx + Math.cos(a) * R * (v / 5), cy + Math.sin(a) * R * (v / 5)]; };

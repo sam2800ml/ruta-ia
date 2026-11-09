@@ -1,6 +1,6 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { fmtDate, http, setViewAs } from "./api";
-import { Evidence, kindLabel, PillarBars } from "./ui";
+import { Evidence, kindLabel, Loading, PillarBars } from "./ui";
 
 export function Empresas({ onView }: { onView: (id: string, name: string) => void }) {
   const [dash, setDash] = useState<any>(null);
@@ -17,6 +17,7 @@ export function Empresas({ onView }: { onView: (id: string, name: string) => voi
     e.preventDefault();
     try { setErr(""); const r = await http("POST", "/companies", { ...f, nit: f.nit || null }); setTok(r.invitation_token); setF({ name: "", nit: "", admin_email: "" }); load(); } catch (x) { setErr((x as Error).message); }
   }
+  if (!dash) return <main className="card wide">{err ? <p className="error">{err}</p> : <Loading />}</main>;
   return (
     <main className="card wide">
       <h1>Empresas en la plataforma</h1>
@@ -51,10 +52,11 @@ export function Empresas({ onView }: { onView: (id: string, name: string) => voi
 
 export function Revision() {
   const [queue, setQueue] = useState<any[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [r, setR] = useState<any>(null);
   const [err, setErr] = useState("");
   const [edit, setEdit] = useState<Record<string, string>>({});
-  const loadQ = useCallback(async () => setQueue(await http("GET", "/review/queue")), []);
+  const loadQ = useCallback(async () => { setQueue(await http("GET", "/review/queue")); setLoaded(true); }, []);
   useEffect(() => { loadQ().catch((e) => setErr(e.message)); }, [loadQ]);
   const open = async (id: string) => setR(await http("GET", `/review/${id}`));
   async function decide(type: string, id: string, action: string, extra: any = {}) {
@@ -70,9 +72,10 @@ export function Revision() {
     </div>);
   if (!r) return (
     <main className="card wide"><h1>Cola de revisión</h1>{err && <p className="error">{err}</p>}
+      {!loaded ? <Loading /> : (
       <table><thead><tr><th>Empresa</th><th>Versión</th><th>Hallazgos</th><th>Sin evidencia</th><th>Contradicciones</th><th></th></tr></thead>
         <tbody>{queue.map((q) => <tr key={q.id}><td>{q.name}</td><td>{q.version}</td><td>{q.findings}</td><td>{q.sin_evidencia}</td><td>{q.contradicciones}</td><td><button onClick={() => open(q.id)}>Revisar</button></td></tr>)}
-          {queue.length === 0 && <tr><td colSpan={6} className="muted">No hay informes pendientes.</td></tr>}</tbody></table></main>);
+          {queue.length === 0 && <tr><td colSpan={6} className="muted">No hay informes pendientes.</td></tr>}</tbody></table>)}</main>);
   const p = r.progress;
   return (
     <main className="card wide">
@@ -103,6 +106,7 @@ export function Banco() {
     e.preventDefault();
     try { setErr(""); await http("POST", "/admin/questions", { text: f.text, pillar: f.pillar || pillars[0].key, roles: f.roles.split(",").map((s) => s.trim()).filter(Boolean), weight: 1 }); setF({ text: "", pillar: "", roles: "" }); load(); } catch (x) { setErr((x as Error).message); }
   }
+  if (!pillars.length) return <main className="card wide">{err ? <p className="error">{err}</p> : <Loading />}</main>;
   return (
     <main className="card wide"><h1>Banco de preguntas</h1>
       <form onSubmit={add} className="grid"><label>Pregunta<input required minLength={5} value={f.text} onChange={(e) => setF({ ...f, text: e.target.value })} /></label>
@@ -124,7 +128,7 @@ export function Metodologia() {
   async function publish() {
     try { setErr(""); await http("POST", "/admin/methodology", { levels: ms[0].levels, thresholds: cuts.split(",").map(Number), formula: ms[0].formula }); load(); } catch (x) { setErr((x as Error).message); }
   }
-  if (!ms.length) return <main className="card">Cargando…</main>;
+  if (!ms.length) return <main className="card">{err ? <p className="error">{err}</p> : <Loading />}</main>;
   const m = ms[0];
   return (
     <main className="card wide"><h1>Metodología · versión {m.version}</h1>
@@ -142,7 +146,7 @@ export function Analitica() {
   const [err, setErr] = useState("");
   const load = useCallback(async () => { setA(await http("GET", "/admin/analytics")); setRuns(await http("GET", "/eval/runs")); }, []);
   useEffect(() => { load().catch((e) => setErr(e.message)); }, [load]);
-  if (!a) return <main className="card">{err || "Cargando…"}</main>;
+  if (!a) return <main className="card">{err ? <p className="error">{err}</p> : <Loading />}</main>;
   const pct = (v: number | null) => (v == null ? "—" : `${Math.round(v * 100)} %`);
   return (
     <main className="card wide"><h1>Analítica y evaluación</h1>

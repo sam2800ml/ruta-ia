@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, http } from "./api";
+import { Loading } from "./ui";
 
 type StepStatus = "done" | "progress" | "pending";
 const STATUS_LABEL: Record<StepStatus, string> = { done: "Completo", progress: "En curso", pending: "Pendiente" };
@@ -49,7 +50,7 @@ export default function Inicio({ onGo }: { onGo: (tab: string) => void }) {
   useEffect(() => { load().catch((e) => setErr(e.message)); }, [load]);
 
   if (err) return <main className="card"><p className="error">{err}</p></main>;
-  if (!data) return <main className="card">Cargando…</main>;
+  if (!data) return <main className="card"><Loading text="Cargando tu avance…" /></main>;
   const { profile, readiness, documents, surveys, reportState, strategy, useCases, activity } = data;
 
   const processed = documents.filter((d: any) => d.status === "processed").length;

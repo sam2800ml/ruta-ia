@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { http } from "./api";
-import { Banner } from "./ui";
+import { Banner, Loading } from "./ui";
 
 export default function Estrategia({ readOnly = false }: { readOnly?: boolean }) {
   const [s, setS] = useState<any>(null);
@@ -13,7 +13,7 @@ export default function Estrategia({ readOnly = false }: { readOnly?: boolean })
   useEffect(() => { end.current?.scrollIntoView?.({ block: "nearest" }); }, [s?.messages?.length]);
 
   const act = (fn: () => Promise<any>) => async () => { try { setErr(""); await fn(); await load(); } catch (e) { setErr((e as Error).message); } };
-  if (!s) return <main className="card">{err || "Cargando…"}</main>;
+  if (!s) return <main className="card">{err ? <p className="error">{err}</p> : <Loading />}</main>;
   if (!s.enabled) return <main className="card"><h1>3 · Estrategia</h1><div className="locked">🔒 {s.locked_message}</div></main>;
   if (!s.started) return <main className="card"><h1>3 · Estrategia</h1><p>{s.disclosure}</p>{!readOnly && <button onClick={act(() => http("POST", "/strategy/start"))}>Empezar</button>}</main>;
 

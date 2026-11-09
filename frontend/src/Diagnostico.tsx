@@ -1,7 +1,7 @@
 import { ChangeEvent, FormEvent, useCallback, useEffect, useState } from "react";
 import { http } from "./api";
 import Informe from "./Informe";
-import { Banner, PillarChips, Section } from "./ui";
+import { Banner, Loading, PillarChips, Section } from "./ui";
 
 const ROLES = ["Tecnología", "Finanzas", "Operaciones", "Riesgos", "Talento Humano", "Comercial"];
 const today = () => new Date(Date.now() + 14 * 864e5).toISOString().slice(0, 10);
@@ -16,10 +16,11 @@ export default function Diagnostico({ readOnly = false, onGo }: { readOnly?: boo
   const [trRoles, setTrRoles] = useState("");
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
+  const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(async () => {
     const [a, b, c, d, e] = await Promise.all([http("GET", "/surveys"), http("GET", "/transcripts"), http("GET", "/consent"), http("GET", "/reports/state"), http("GET", "/outbox")]);
-    setSv(a); setTr(b); setConsent(c); setState(d); setMails(e);
+    setSv(a); setTr(b); setConsent(c); setState(d); setMails(e); setLoaded(true);
   }, []);
   useEffect(() => { load().catch((e) => setErr(e.message)); }, [load]);
   const generating = state?.latest?.status === "generating";
@@ -36,6 +37,7 @@ export default function Diagnostico({ readOnly = false, onGo }: { readOnly?: boo
   }
 
   const latest = state?.latest?.status as string | undefined;
+  if (!loaded) return <main className="card wide">{err ? <p className="error">{err}</p> : <Loading />}</main>;
   return (
     <main className="card wide">
       <h1>2 · Diagnóstico</h1>

@@ -111,3 +111,10 @@ tbody tr:last-child td{border-bottom:0}
 .kpis div{background:var(--card)}
 .demo-badge{background:#fef3c7;color:#92400e;padding:.5rem .9rem;border-radius:8px;font-size:.85rem;margin-bottom:1rem}
 .demo-switch{color:rgba(255,255,255,.75);text-align:left;padding:.5rem .7rem;font-size:.85rem}
+
+/* Carga */
+.spinner{display:inline-block;width:1em;height:1em;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;vertical-align:-0.15em}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading{display:flex;align-items:center;gap:.5rem;color:var(--muted)}
+button .spinner{border-color:rgba(255,255,255,.4);border-top-color:#fff;margin-right:.4rem}
+button.secondary .spinner{border-color:var(--line);border-top-color:var(--accent)}

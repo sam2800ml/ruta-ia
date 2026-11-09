@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { http } from "./api";
+import { Loading } from "./ui";
 
 type Q = { id: string; text: string; pillar: string };
 const SCALE = ["Muy en desacuerdo", "En desacuerdo", "Neutral", "De acuerdo", "Muy de acuerdo"];
@@ -23,7 +24,7 @@ export default function Survey({ token }: { token: string }) {
     } catch (e) { setError((e as Error).message); }
   }
 
-  if (state === "loading") return <main className="card narrow">Cargando…</main>;
+  if (state === "loading") return <main className="card narrow"><Loading /></main>;
   if (state === "invalid") return <main className="card narrow"><h1>Enlace no disponible</h1><p className="muted">Este enlace ya se usó o venció. Pide un recordatorio a quien te invitó.</p></main>;
   if (state === "done") return <main className="card narrow"><h1>¡Gracias!</h1><p>Tus respuestas quedaron registradas.</p></main>;
   const complete = qs.every((q) => vals[q.id]);

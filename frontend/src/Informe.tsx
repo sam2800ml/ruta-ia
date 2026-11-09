@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { download, http } from "./api";
-import { Evidence, kindLabel, PillarBars, Radar } from "./ui";
+import { Evidence, kindLabel, Loading, PillarBars, Radar } from "./ui";
 
 export default function Informe({ readOnly = false, onGo }: { readOnly?: boolean; onGo?: (t: string) => void }) {
   const [r, setR] = useState<any>(null);
   const [err, setErr] = useState("");
   useEffect(() => { http("GET", "/reports/published").then(setR).catch((e) => setErr(e.message)); }, []);
   if (err) return null;
-  if (!r) return <p className="muted">Cargando informe…</p>;
+  if (!r) return <Loading text="Cargando informe…" />;
   const scores = r.pillars as { label: string; score: number; low: boolean }[];
   const byId = Object.fromEntries(r.findings.map((f: any) => [f.id, f]));
   return (

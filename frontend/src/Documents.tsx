@@ -1,5 +1,6 @@
 import { ChangeEvent, DragEvent, useCallback, useEffect, useState } from "react";
 import { api, Doc, Options, Profile, Readiness } from "./api";
+import { Loading } from "./ui";
 
 const STATUS: Record<Doc["status"], string> = {
   uploaded: "Cargado", processing: "Procesando", processed: "Procesado", error: "Con error",
@@ -50,7 +51,7 @@ export default function Documents({ readOnly = false }: { readOnly?: boolean }) 
     refresh();
   }
 
-  if (!profile || !ready || !opts) return <main className="card">{error || "Cargando…"}</main>;
+  if (!profile || !ready || !opts) return <main className="card">{error ? <p className="error">{error}</p> : <Loading />}</main>;
   const set = (k: keyof Profile) => (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setProfile({ ...profile, [k]: e.target.value || null });
 

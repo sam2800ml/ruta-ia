@@ -1,6 +1,6 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { download, http } from "./api";
-import { Banner } from "./ui";
+import { Banner, Loading } from "./ui";
 
 const ZONES: Record<string, string> = { quick_win: "Victorias rápidas", estrategico: "Estratégicos", mejoras_menores: "Mejoras menores", reconsiderar: "Reconsiderar" };
 const empty = { name: "", area: "", risk: "limitado", indicator: "", baseline: "", target: "", tech: "", personal_data: false,
@@ -47,7 +47,7 @@ export default function Casos({ readOnly = false, consultant = false, companyId 
       legal: Number(form.legal), ethic: Number(form.ethic), infra: Number(form.infra) };
     try { setErr(""); if (editId) await http("PUT", `/use-cases/${editId}`, b); else await http("POST", "/use-cases", b); setForm(null); setEditId(null); await load(); } catch (x) { setErr((x as Error).message); }
   }
-  if (!d) return <main className="card">{err || "Cargando…"}</main>;
+  if (!d) return <main className="card">{err ? <p className="error">{err}</p> : <Loading />}</main>;
   if (!d.enabled) return <main className="card"><h1>4 · Casos de uso</h1><div className="locked">🔒 {d.locked_message}</div></main>;
   const f = (k: string) => (e: any) => setForm({ ...form, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value });
   return (
