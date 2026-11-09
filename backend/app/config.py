@@ -17,9 +17,13 @@ class Settings(BaseSettings):
     inline_jobs: bool = False  # pruebas: True
     public_url: str = "http://localhost:5173"
     cors_origins: str = "http://localhost:5173,http://localhost:8080"
-    llm_provider: str = "stub"          # "stub" | "anthropic" (el proveedor autorizado está por decidir)
+    llm_provider: str = "stub"          # "stub" | "anthropic" | "openai" | "groq"
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-sonnet-5-5"
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o-mini"
+    groq_api_key: str = ""
+    groq_model: str = "llama-3.3-70b-versatile"
 
 
 settings = Settings()

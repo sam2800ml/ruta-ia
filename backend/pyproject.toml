@@ -5,6 +5,7 @@ requires-python = ">=3.12"
 dependencies = [
   "fastapi", "uvicorn", "sqlalchemy>=2", "psycopg[binary]", "pydantic>=2",
   "pydantic-settings", "argon2-cffi", "pyjwt", "email-validator", "python-multipart", "reportlab", "python-docx", "pypdf",
+  "anthropic", "openai", "langsmith",
 ]
 [project.optional-dependencies]
 dev = ["pytest", "httpx"]

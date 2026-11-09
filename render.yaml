@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: ruta-ia-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: RUTA_DATABASE_URL
+        sync: false
+      - key: RUTA_ADMIN_DATABASE_URL
+        sync: false
+      - key: RUTA_JWT_SECRET
+        generateValue: true
+      - key: RUTA_CORS_ORIGINS
+        sync: false
+      - key: RUTA_PUBLIC_URL
+        sync: false
+      - key: RUTA_LLM_PROVIDER
+        value: stub
+      - key: RUTA_ANTHROPIC_API_KEY
+        sync: false
+      - key: RUTA_OPENAI_API_KEY
+        sync: false
+      - key: RUTA_GROQ_API_KEY
+        sync: false
+      - key: LANGSMITH_TRACING
+        value: "true"
+      - key: LANGSMITH_API_KEY
+        sync: false
+      - key: LANGSMITH_PROJECT
+        value: ruta-ia
