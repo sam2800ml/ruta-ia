@@ -1,0 +1,256 @@
+<title>Arquitectura de Ruta IA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f5f6fb; --surface:#ffffff; --surface-2:#eef0f9; --ink:#1a2133; --muted:#5b6478; --line:#dde1ec;
+    --brand:#4f46e5; --brand-soft:#ebe9fd; --human:#b45309; --human-soft:#fbf0de;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#12141f; --surface:#1b1d2b; --surface-2:#232540; --ink:#e7eaf5; --muted:#a3abc2; --line:#2e3049;
+      --brand:#a5b4fc; --brand-soft:#28264a; --human:#f0b86e; --human-soft:#3a2a18;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#12141f; --surface:#1b1d2b; --surface-2:#232540; --ink:#e7eaf5; --muted:#a3abc2; --line:#2e3049;
+    --brand:#a5b4fc; --brand-soft:#28264a; --human:#f0b86e; --human-soft:#3a2a18;
+  }
+
+  *{box-sizing:border-box}
+  body{background:var(--bg); color:var(--ink); font-family:"IBM Plex Sans",system-ui,sans-serif; line-height:1.55;}
+  .wrap{max-width:900px; margin-inline:auto; padding-inline:20px; padding-block:48px 80px;}
+
+  .eyebrow{font:600 11.5px "IBM Plex Mono",monospace; letter-spacing:.08em; text-transform:uppercase; color:var(--brand); margin:0;}
+  h1{font:700 clamp(28px,5vw,38px)/1.15 "IBM Plex Sans",sans-serif; text-wrap:balance; margin:.35em 0 .3em;}
+  .dek{color:var(--muted); font-size:17px; max-width:62ch; margin:0 0 2.6em;}
+
+  h2{font:600 22px "IBM Plex Sans",sans-serif; margin:2.4em 0 .5em; display:flex; align-items:baseline; gap:.5em;}
+  h2 .n{font:500 13px "IBM Plex Mono",monospace; color:var(--muted);}
+  p{max-width:68ch; margin:0 0 1em;}
+  p.note{color:var(--muted); font-size:14.5px;}
+
+  code, .k{font-family:"IBM Plex Mono",monospace; font-size:.92em; background:var(--surface-2); padding:.12em .4em; border-radius:4px;}
+
+  figure{margin:1.6em 0 1.8em; padding:0;}
+  .diagram-scroll{overflow-x:auto; background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:18px 10px;}
+  .diagram-scroll svg{display:block; margin-inline:auto;}
+  figcaption{color:var(--muted); font-size:14px; margin-top:.7em; max-width:62ch;}
+  figcaption strong{color:var(--ink); font-weight:600;}
+
+  .legend{display:flex; gap:1.4em; flex-wrap:wrap; font-size:13px; color:var(--muted); margin:.5em 0 0;}
+  .legend span{display:inline-flex; align-items:center; gap:.4em;}
+  .swatch{width:11px; height:11px; border-radius:3px; display:inline-block; border:1.5px solid currentColor;}
+  .swatch.ai{background:var(--brand-soft); border-color:var(--brand); color:var(--brand);}
+  .swatch.human{background:var(--human-soft); border-color:var(--human); color:var(--human);}
+  .swatch.plain{background:var(--surface); border-color:var(--ink); color:var(--ink);}
+
+  .stack{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; margin:1.4em 0 2em;}
+  .stack .card{background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:16px 18px;}
+  .stack .card h3{font:600 14px "IBM Plex Sans",sans-serif; margin:0 0 .5em; display:flex; align-items:center; gap:.5em;}
+  .stack .card h3 .dot{width:8px; height:8px; border-radius:50%; background:var(--brand); display:inline-block;}
+  .stack .card ul{margin:0; padding-left:1.1em; font-size:13.5px; color:var(--muted);}
+  .stack .card li{margin-bottom:.25em;}
+  .stack .card li code{font-size:.95em;}
+
+  svg text{fill:currentColor;}
+  .box{fill:var(--surface); stroke:currentColor; stroke-width:1.5;}
+  .box-ai{fill:var(--brand-soft); stroke:var(--brand);}
+  .box-human{fill:var(--human-soft); stroke:var(--human);}
+  .label{font:600 13px "IBM Plex Sans",sans-serif;}
+  .sub{font:400 10.5px "IBM Plex Mono",monospace; fill:var(--muted);}
+  .arrow{stroke:currentColor; stroke-width:1.4; fill:none; marker-end:url(#arrow);}
+  .arrow-brand{stroke:var(--brand); marker-end:url(#arrow-brand);}
+  .arrow-human{stroke:var(--human); marker-end:url(#arrow-human);}
+  .arrow-label{font:500 10.5px "IBM Plex Mono",monospace; fill:var(--muted);}
+
+  @media (max-width:480px){ .wrap{padding-inline:16px;} }
+</style>
+
+<div class="wrap">
+  <p class="eyebrow">Ruta IA · documentación técnica</p>
+  <h1>Arquitectura y flujo de datos</h1>
+  <p class="dek">Tres piezas desplegadas por separado — frontend estático, API con estado, base de datos — y un punto fijo: ningún hallazgo generado por IA llega a la empresa sin que un consultor lo revise.</p>
+
+  <p>El frontend (React) se publica como archivos estáticos en GitHub Pages: no corre nada del lado del servidor, solo le habla a la API por HTTPS. La API (FastAPI, en un contenedor Docker sobre Render) es la única pieza con lógica y la única que toca la base de datos (Postgres en Neon). Separarlas así significa que el sitio nunca se cae por un despliegue del backend, y que el proveedor de IA se puede cambiar sin tocar el frontend ni la lógica de negocio.</p>
+
+  <h2><span class="n">01</span> Cómo viaja una petición</h2>
+  <p>Toda petición pasa por el mismo embudo: el token decide quién es, las variables de sesión de Postgres deciden qué puede ver (aislamiento por empresa vía Row-Level Security), y solo si la ruta lo necesita se desvía hacia la capa de IA — intercambiable por variable de entorno y trazada en LangSmith sin que el resto del código lo sepa.</p>
+
+  <figure>
+    <div class="diagram-scroll">
+      <svg viewBox="0 0 760 600" width="760" height="600" role="img" aria-label="Diagrama: una petición del navegador pasa por GitHub Pages, llega a Render donde se valida el JWT y se fija el contexto de RLS en Postgres, y desde ahí el router sigue directo a Postgres o, si la ruta lo requiere, se desvía por la capa LLM intercambiable, un cliente envuelto por LangSmith y el proveedor de IA activo (Groq, OpenAI o Anthropic), que registra una traza en LangSmith y guarda el resultado en Postgres.">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+          </marker>
+          <marker id="arrow-brand" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--brand)"/>
+          </marker>
+        </defs>
+
+        <!-- Navegador -->
+        <rect class="box" x="260" y="20" width="200" height="46" rx="8"/>
+        <text class="label" x="360" y="48" text-anchor="middle">Navegador</text>
+
+        <line class="arrow" x1="360" y1="66" x2="360" y2="104"/>
+        <text class="arrow-label" x="368" y="90">GET /</text>
+
+        <!-- GitHub Pages -->
+        <rect class="box" x="260" y="110" width="200" height="52" rx="8"/>
+        <text class="label" x="360" y="133" text-anchor="middle">GitHub Pages</text>
+        <text class="sub" x="360" y="150" text-anchor="middle">solo HTML/JS/CSS</text>
+
+        <line class="arrow" x1="360" y1="162" x2="360" y2="204"/>
+        <text class="arrow-label" x="368" y="188">fetch() HTTPS</text>
+
+        <!-- Render -->
+        <rect class="box" x="210" y="210" width="300" height="64" rx="8"/>
+        <text class="label" x="360" y="234" text-anchor="middle">Render · FastAPI (Docker)</text>
+        <text class="sub" x="360" y="252" text-anchor="middle">JWT → rol + empresa → variables RLS</text>
+
+        <!-- rama izquierda: directo a Postgres -->
+        <path class="arrow" d="M260,274 L120,520" />
+        <text class="arrow-label" x="150" y="400">casi toda ruta</text>
+
+        <!-- rama derecha: capa IA -->
+        <path class="arrow-brand" d="M460,274 L490,308" style="stroke:var(--brand)"/>
+        <text class="arrow-label" x="468" y="296" style="fill:var(--brand)">si la ruta usa IA</text>
+
+        <!-- Capa LLM -->
+        <rect class="box-ai" x="380" y="312" width="220" height="48" rx="8"/>
+        <text class="label" x="490" y="333" text-anchor="middle">Capa LLM · get_llm()</text>
+        <text class="sub" x="490" y="350" text-anchor="middle">RUTA_LLM_PROVIDER=stub|anthropic|openai|groq</text>
+
+        <line class="arrow" x1="490" y1="360" x2="490" y2="388" style="stroke:var(--brand)"/>
+
+        <!-- Cliente envuelto -->
+        <rect class="box-ai" x="380" y="392" width="220" height="42" rx="8"/>
+        <text class="label" x="490" y="413" text-anchor="middle">Cliente envuelto</text>
+        <text class="sub" x="490" y="428" text-anchor="middle">langsmith.wrap_openai / wrap_anthropic</text>
+
+        <line class="arrow" x1="490" y1="434" x2="490" y2="462" style="stroke:var(--brand)"/>
+
+        <!-- Proveedor -->
+        <rect class="box-ai" x="380" y="466" width="220" height="48" rx="8"/>
+        <text class="label" x="490" y="487" text-anchor="middle">Groq · OpenAI · Anthropic</text>
+        <text class="sub" x="490" y="504" text-anchor="middle">el que esté activo</text>
+
+        <!-- LangSmith -->
+        <path class="arrow" d="M600,480 L690,480" style="stroke:var(--brand)"/>
+        <text class="arrow-label" x="610" y="472" style="fill:var(--brand)">traza</text>
+        <rect class="box-ai" x="628" y="456" width="112" height="48" rx="8"/>
+        <text class="label" x="684" y="477" text-anchor="middle" font-size="12">LangSmith</text>
+        <text class="sub" x="684" y="492" text-anchor="middle" font-size="9.5">cada llamada</text>
+
+        <!-- de vuelta a Postgres -->
+        <path class="arrow" d="M440,514 L330,548"/>
+        <text class="arrow-label" x="335" y="530">guarda resultado</text>
+
+        <!-- Postgres -->
+        <rect class="box" x="90" y="524" width="440" height="60" rx="8"/>
+        <text class="label" x="310" y="549" text-anchor="middle">Postgres (Neon)</text>
+        <text class="sub" x="310" y="567" text-anchor="middle">rol admin (migraciones) · rol ruta_app (runtime, privilegios mínimos)</text>
+      </svg>
+    </div>
+    <figcaption>El <strong>router nunca sabe qué proveedor de IA responde</strong>: siempre llama a <code>get_llm()</code>. LangSmith se engancha envolviendo el cliente HTTP, no el código de negocio, así que la trazabilidad no depende de instrumentar cada ruta a mano.</figcaption>
+  </figure>
+
+  <h2><span class="n">02</span> El punto de control humano</h2>
+  <p>El agente nunca publica directo. Genera candidatos — hallazgos, puntajes, recomendaciones — que quedan en un estado intermedio invisible para la empresa hasta que un consultor decide, bloque por bloque, si se acepta, se edita o se rechaza. Solo entonces se habilita el botón de publicar.</p>
+
+  <figure>
+    <div class="diagram-scroll">
+      <svg viewBox="0 0 820 300" width="820" height="300" role="img" aria-label="Diagrama: la empresa aporta encuestas, documentos y transcripciones; el agente de diagnóstico propone hallazgos citados y el informe queda en estado in_review, invisible para la empresa; un consultor revisa cada bloque (aceptar, editar o rechazar); si falta algo por revisar el informe permanece sin publicar, y solo cuando todos los bloques están decididos se publica y se vuelve visible para la empresa, habilitando la etapa de Estrategia.">
+        <defs>
+          <marker id="arrow-human" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--human)"/>
+          </marker>
+        </defs>
+
+        <!-- Empresa -->
+        <rect class="box" x="16" y="108" width="160" height="70" rx="8"/>
+        <text class="label" x="96" y="138" text-anchor="middle">Empresa</text>
+        <text class="sub" x="96" y="155" text-anchor="middle">encuestas · docs</text>
+        <text class="sub" x="96" y="168" text-anchor="middle">transcripciones</text>
+
+        <line class="arrow" x1="176" y1="143" x2="214" y2="143" style="stroke:var(--brand)"/>
+
+        <!-- Agente -->
+        <rect class="box-ai" x="218" y="108" width="170" height="70" rx="8"/>
+        <text class="label" x="303" y="135" text-anchor="middle">Agente de</text>
+        <text class="label" x="303" y="152" text-anchor="middle">diagnóstico</text>
+        <text class="sub" x="303" y="168" text-anchor="middle">hallazgos citados</text>
+
+        <line class="arrow" x1="388" y1="143" x2="426" y2="143" style="stroke:var(--brand)"/>
+        <text class="arrow-label" x="392" y="128" style="fill:var(--brand)">estado: in_review</text>
+
+        <!-- Gate -->
+        <polygon class="box-human" points="505,88 600,143 505,198 410,143"/>
+        <text class="label" x="505" y="134" text-anchor="middle" fill="var(--human)">Revisión</text>
+        <text class="label" x="505" y="150" text-anchor="middle" fill="var(--human)">humana</text>
+
+        <!-- rama: falta revisar -->
+        <path class="arrow-human" d="M505,198 L505,246" />
+        <text class="arrow-label" x="440" y="230" style="fill:var(--human)">falta un bloque</text>
+        <rect class="box-human" x="400" y="250" width="210" height="42" rx="8"/>
+        <text class="label" x="505" y="276" text-anchor="middle" fill="var(--human)" font-size="12">sin publicar</text>
+
+        <!-- rama: todo decidido -->
+        <path class="arrow" d="M600,143 L648,143" style="stroke:var(--brand)"/>
+        <text class="arrow-label" x="608" y="128" style="fill:var(--brand)">todo aceptado/editado/rechazado</text>
+
+        <rect class="box-ai" x="652" y="108" width="150" height="70" rx="8"/>
+        <text class="label" x="727" y="135" text-anchor="middle">Publicado</text>
+        <text class="sub" x="727" y="152" text-anchor="middle">visible a la empresa</text>
+        <text class="sub" x="727" y="165" text-anchor="middle">→ habilita Estrategia</text>
+      </svg>
+    </div>
+    <figcaption>Cada bloque guarda su propio <code>review_status</code> (<code>accepted</code> / <code>edited</code> / <code>rejected</code>); publicar solo es posible cuando ninguno queda <code>pending</code>. La evidencia de cada hallazgo, además, se verifica contra el texto fuente antes de que el agente pueda siquiera proponerlo — no hay forma de llegar a esta pantalla con una cita inventada.</figcaption>
+  </figure>
+
+  <div class="legend">
+    <span><i class="swatch plain"></i> datos / backend plano</span>
+    <span><i class="swatch ai"></i> camino con IA</span>
+    <span><i class="swatch human"></i> punto de control humano</span>
+  </div>
+
+  <h2><span class="n">03</span> Pila técnica</h2>
+  <div class="stack">
+    <div class="card">
+      <h3><span class="dot"></span>Frontend</h3>
+      <ul>
+        <li><code>React</code> + <code>TypeScript</code>, build con <code>Vite</code></li>
+        <li>Estático en GitHub Pages, sin servidor propio</li>
+        <li>Modo demo: intercepta <code>fetch</code> con datos de ejemplo si no hay backend</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3><span class="dot"></span>Backend</h3>
+      <ul>
+        <li><code>FastAPI</code> en Docker, desplegado en Render</li>
+        <li>Auth con <code>JWT</code> + <code>argon2</code>; roles <code>company_user</code> / <code>consultant</code></li>
+        <li>Extracción: <code>pypdf</code>, <code>python-docx</code>; export: <code>reportlab</code></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3><span class="dot"></span>Datos</h3>
+      <ul>
+        <li><code>Postgres</code> gestionado en Neon</li>
+        <li>Aislamiento por empresa con Row-Level Security</li>
+        <li>Rol <code>ruta_app</code> sin permisos de dueño — mínimo privilegio</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3><span class="dot"></span>IA y trazabilidad</h3>
+      <ul>
+        <li>Groq, OpenAI o Anthropic tras una sola interfaz</li>
+        <li><code>LangSmith</code> traza cada llamada automáticamente</li>
+        <li>Ninguna evidencia se acepta sin cita verificada en la fuente</li>
+      </ul>
+    </div>
+  </div>
+
+  <p class="note">Cada pieza se despliega y versiona por separado: un cambio de proveedor de IA es una variable de entorno en Render, no un redeploy del frontend; un ajuste visual es un push a GitHub Pages que no toca el backend ni la base de datos.</p>
+</div>

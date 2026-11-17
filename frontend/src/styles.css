@@ -40,8 +40,9 @@ fieldset.plain{border:0;padding:0;margin:0;min-width:0}
 table{width:100%;border-collapse:collapse}
 .banner{background:#eef4ff;border-radius:6px;padding:.5rem .75rem}.viewas{margin:0;border-radius:0}
 .locked{background:#f6f6f6;border-radius:6px;padding:1rem}
-.stepper{display:flex;gap:.5rem;list-style:none;padding:0;flex-wrap:wrap}.stepper li{padding:.3rem .7rem;border-radius:99px;background:#eee;font-size:.85rem}
+.stepper{display:flex;gap:.5rem;list-style:none;padding:0;flex-wrap:wrap}.stepper li{padding:.3rem .7rem;border-radius:99px;background:#eee;font-size:.85rem;cursor:pointer}
 .stepper li.current,.stepper li.in_progress{background:var(--accent);color:#fff}.stepper li.done,.stepper li.completed{background:#15803d;color:#fff}
+.stepper li.on{box-shadow:0 0 0 2px var(--ink)}
 .chatgrid{display:grid;grid-template-columns:2fr 1fr;gap:1.5rem}@media(max-width:800px){.chatgrid,.two{grid-template-columns:1fr}}
 .chat{max-height:420px;overflow:auto;display:flex;flex-direction:column;gap:.5rem;padding:.5rem;border:1px solid #ddd;border-radius:6px}
 .bubble{padding:.5rem .75rem;border-radius:10px;max-width:85%;background:#f0f0f0}.bubble.user,.bubble.company{align-self:flex-end;background:#dbe8ff}

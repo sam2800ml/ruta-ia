@@ -11,10 +11,11 @@ export default function Estrategia({ readOnly = false }: { readOnly?: boolean })
   const [sendingStage, setSendingStage] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [viewStage, setViewStage] = useState<string | null>(null);
   const end = useRef<HTMLDivElement>(null);
   const load = useCallback(async () => { try { setS(await http("GET", "/strategy")); } catch (e) { setErr((e as Error).message); } }, []);
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { end.current?.scrollIntoView?.({ block: "nearest" }); }, [s?.messages?.length, pending, sending]);
+  useEffect(() => { end.current?.scrollIntoView?.({ block: "nearest" }); }, [s?.messages?.length, pending, sending, viewStage]);
 
   const act = (key: string, fn: () => Promise<any>) => async () => {
     setBusy(key);
@@ -26,8 +27,9 @@ export default function Estrategia({ readOnly = false }: { readOnly?: boolean })
     {!readOnly && <button disabled={busy === "start"} onClick={act("start", () => http("POST", "/strategy/start"))}>{busy === "start" && <Spinner />}Empezar</button>}</main>;
 
   const cur = s.current_stage as string;
-  const msgs = s.messages.filter((m: any) => m.stage === cur);
-  const props = s.proposals.filter((p: any) => p.stage === cur);
+  const shown = viewStage ?? cur;
+  const msgs = s.messages.filter((m: any) => m.stage === shown);
+  const props = s.proposals.filter((p: any) => p.stage === shown);
   const done = s.status === "closed";
 
   async function send() {
@@ -45,17 +47,25 @@ export default function Estrategia({ readOnly = false }: { readOnly?: boolean })
     }
   }
 
+  async function completeStage() {
+    await act("complete", () => http("POST", `/strategy/stages/${cur}/complete`))();
+    setViewStage(null);
+  }
+
   return (
     <main className="card wide">
       <h1>3 · Estrategia</h1>
       {readOnly && <Banner>Vista de solo lectura</Banner>}
-      <ol className="stepper">{s.stages.map((st: any) => <li key={st.key} className={st.status}>{st.label}</li>)}</ol>
+      <ol className="stepper">{s.stages.map((st: any) => (
+        <li key={st.key} className={`${st.status}${st.key === shown ? " on" : ""}`} onClick={() => setViewStage(st.key)}>{st.label}</li>))}</ol>
       <div className="chatgrid">
         <section>
+          {shown !== cur && <Banner>Viendo «{s.stages.find((st: any) => st.key === shown)?.label}» · <button className="link" onClick={() => setViewStage(null)}>volver a la etapa actual</button></Banner>}
           <div className="chat" aria-live="polite">
             {msgs.map((m: any, i: number) => <div key={i} className={`bubble ${m.author}`}>{m.text}</div>)}
-            {pending && sendingStage === cur && <div className="bubble user">{pending}</div>}
-            {sending && sendingStage === cur && <div className="bubble assistant"><Spinner /> Pensando…</div>}
+            {msgs.length === 0 && <p className="muted">Todavía no hay conversación en esta etapa.</p>}
+            {pending && sendingStage === shown && <div className="bubble user">{pending}</div>}
+            {sending && sendingStage === shown && <div className="bubble assistant"><Spinner /> Pensando…</div>}
             {props.map((p: any) => (
               <div key={p.id} className="proposal">
                 <small className="muted">Propuesta · {p.kind}{p.basis ? ` · ${p.basis}` : ""}</small>
@@ -68,10 +78,10 @@ export default function Estrategia({ readOnly = false }: { readOnly?: boolean })
             <div ref={end} />
           </div>
           {err && <p role="alert" className="error">{err}</p>}
-          {!done && !readOnly && <div className="compose">
+          {!done && !readOnly && shown === cur && <div className="compose">
             <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()} placeholder="Escribe tu respuesta…" disabled={sending} />
             <button onClick={send} disabled={sending || !text.trim()}>{sending && <Spinner />}Enviar</button>
-            <button className="secondary" disabled={busy === "complete" || sending} onClick={act("complete", () => http("POST", `/strategy/stages/${cur}/complete`))}>{busy === "complete" && <Spinner />}Completar etapa</button>
+            <button className="secondary" disabled={busy === "complete" || sending} onClick={completeStage}>{busy === "complete" && <Spinner />}Completar etapa</button>
           </div>}
           {done && <p className="banner">Estrategia cerrada. Ya puedes trabajar los casos de uso.</p>}
         </section>
