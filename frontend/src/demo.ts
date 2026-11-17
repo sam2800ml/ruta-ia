@@ -255,7 +255,12 @@ function readiness() {
   return { profile_complete: true, missing_fields: [], suggested_documents: docs, missing_documents: docs.filter((d) => d.required && !d.done).map((d) => d.type), can_continue: true };
 }
 
-on("GET", "/documents", () => documents);
+let docsPollCount = 0;
+on("GET", "/documents", () => {
+  docsPollCount++;
+  if (docsPollCount >= 2) documents = documents.map((d) => d.id === "d6" ? { ...d, status: "processed" as const } : d);
+  return documents;
+});
 on("POST", "/documents", (_p, _q, body: FormData) => {
   const file = body.get("file") as File; const doc_type = String(body.get("doc_type"));
   const doc = { id: uid(), name: file?.name ?? "documento.pdf", doc_type, size_bytes: file?.size ?? 100000, status: "processed" as const, error: null, created_at: new Date().toISOString() };
@@ -331,12 +336,22 @@ on("POST", "/use-cases", (_p, _q, body) => {
 });
 on("PUT", "/use-cases/:id", (p, _q, body) => {
   useCases = useCases.map((c) => c.id === p.id ? caseFicha({ ...c, ...body,
+    complexity: Number(((Number(body.legal) + Number(body.ethic) + Number(body.infra)) / 3).toFixed(1)),
     complexity_parts: { legal: Number(body.legal), ethic: Number(body.ethic), infra: Number(body.infra) },
     complexity_notes: { legal: body.legal_note, ethic: body.ethic_note, infra: body.infra_note } }) : c);
   return { ok: true };
 });
 on("POST", "/use-cases/:id/status", (p, _q, body) => { useCases = useCases.map((c) => c.id === p.id ? { ...c, status: body.status } : c); return { ok: true }; });
-on("POST", "/use-cases/from-opportunities", () => ({ created: 0 }));
+on("POST", "/use-cases/from-opportunities", () => {
+  const n = useCases.length + 1;
+  const c = caseFicha({ id: uid(), n, name: "Resumen automático de reuniones", area: "Operaciones", risk: "mínimo", status: "proposed", zone: "mejoras_menores",
+    indicator: "Horas en elaborar minutas", baseline: "2 horas por reunión", target: "15 minutos",
+    tech: "LLM que resume la transcripción y extrae compromisos", impact: 2.5, complexity: 1.3, volume_per_month: 20, minutes_saved: 100,
+    complexity_parts: { legal: 1, ethic: 1, infra: 2 },
+    complexity_notes: { legal: "No usa datos personales sensibles.", ethic: "Riesgo mínimo: solo resume, no decide.", infra: "Requiere acceso a las grabaciones o transcripciones." } });
+  useCases = [...useCases, c];
+  return { created: 1 };
+});
 
 on("GET", "/activity", () => activity);
 

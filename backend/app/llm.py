@@ -7,12 +7,26 @@ Implementaciones:
   modelo una cita textual y se verifica contra la fuente antes de aceptar el hallazgo.
 Ninguna acepta evidencia que no exista literalmente en los documentos o transcripciones.
 """
+import json
 import re
 from dataclasses import dataclass, field
 
-from langsmith import traceable
+try:
+    from langsmith import traceable
+except ImportError:
+    def traceable(*_dargs, **_dkwargs):  # modo stub: no depende de langsmith para funcionar
+        def _decorator(fn):
+            return fn
+        return _decorator
 
 from .config import settings
+
+import os
+
+
+def _tracing_ready() -> bool:
+    """LANGSMITH_TRACING solo sirve si además hay una clave real: evita tracear sin autenticación."""
+    return os.environ.get("LANGSMITH_TRACING", "").lower() == "true" and bool(os.environ.get("LANGSMITH_API_KEY"))
 
 PILAR_KEYWORDS = {
     "strategy": ["estrategia", "presupuesto", "objetivos", "visión", "dirección"],
@@ -111,9 +125,11 @@ class AnthropicLLM(LLM):
 
     def __init__(self):
         import anthropic
-        from langsmith.wrappers import wrap_anthropic
-        # wrap_anthropic solo envía trazas si LANGSMITH_TRACING=true; si no, es transparente.
-        self.client = wrap_anthropic(anthropic.Anthropic(api_key=settings.anthropic_api_key))
+        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+        if _tracing_ready():
+            from langsmith.wrappers import wrap_anthropic
+            client = wrap_anthropic(client)
+        self.client = client
 
     @traceable(name="agente_diagnostico.propose_findings", run_type="chain")
     def propose_findings(self, fragments, segments):
@@ -179,8 +195,11 @@ class OpenAICompatibleLLM(LLM):
 
     def __init__(self, api_key: str, model: str):
         from openai import OpenAI
-        from langsmith.wrappers import wrap_openai
-        self.client = wrap_openai(OpenAI(api_key=api_key, base_url=self.base_url))
+        client = OpenAI(api_key=api_key, base_url=self.base_url)
+        if _tracing_ready():
+            from langsmith.wrappers import wrap_openai
+            client = wrap_openai(client)
+        self.client = client
         self.model = model
 
     @traceable(name="agente_diagnostico.propose_findings", run_type="chain")
@@ -190,33 +209,38 @@ class OpenAICompatibleLLM(LLM):
         if not sources:
             return []
         numbered = "\n".join(f"[{i}] {t}" for i, (_, _, t, _) in enumerate(sources))
-        system = ("Eres consultor de adopción de IA. Con las fuentes numeradas que te dan, lista hasta 8 hallazgos, una línea por "
-                  "hallazgo, con el formato exacto: pilar|tipo|título|descripción|cita textual|índice de fuente. "
+        system = ("Eres consultor de adopción de IA. Con las fuentes numeradas que te dan, devuelve hasta 8 hallazgos como un "
+                  "arreglo JSON, sin texto fuera del arreglo. Cada elemento: "
+                  '{"pilar":"...","tipo":"...","titulo":"...","descripcion":"...","cita":"...","indice_fuente":0}. '
                   "pilar ∈ strategy, infrastructure, data, governance, talent, culture. tipo ∈ brecha, fortaleza, contradiccion. "
-                  "La 'cita textual' debe ser una copia EXACTA de un fragmento de la fuente indicada, sin parafrasear. "
-                  "No agregues texto fuera de ese formato. No inventes datos que no estén en las fuentes.")
+                  "'cita' debe ser una copia EXACTA de un fragmento de la fuente con ese índice, sin parafrasear. "
+                  "No inventes datos que no estén en las fuentes.")
         resp = self.client.chat.completions.create(model=self.model, max_tokens=2000,
             messages=[{"role": "system", "content": system}, {"role": "user", "content": numbered}])
         text = resp.choices[0].message.content or ""
+        try:
+            items = json.loads(text[text.index("["):text.rindex("]") + 1])
+        except (ValueError, json.JSONDecodeError):
+            items = []
         out: list[Candidate] = []
-        for line in text.splitlines():
-            parts = [p.strip() for p in line.split("|")]
-            if len(parts) < 6:
+        for item in items:
+            if not isinstance(item, dict):
                 continue
-            pillar, kind, title, desc, quote, idx = parts[0], parts[1], parts[2], parts[3], parts[4], parts[5]
+            pillar, kind = item.get("pilar"), item.get("tipo")
             if pillar not in PILAR_KEYWORDS or kind not in ("brecha", "fortaleza", "contradiccion"):
                 continue
             try:
-                i = int(idx)
-            except ValueError:
+                i = int(item.get("indice_fuente"))
+            except (TypeError, ValueError):
                 continue
             if not (0 <= i < len(sources)):
                 continue
             stype, sid, src_text, ref = sources[i]
-            found = _find_quote(quote, src_text)
+            found = _find_quote(str(item.get("cita", "")), src_text)
             if not found:
                 continue
-            out.append(Candidate(kind, pillar, title, desc, [{"source_type": stype, "source_id": sid, "quote": found, "ref": ref}]))
+            out.append(Candidate(kind, pillar, str(item.get("titulo", "")), str(item.get("descripcion", "")),
+                                  [{"source_type": stype, "source_id": sid, "quote": found, "ref": ref}]))
         return out[:8]
 
     @traceable(name="agente_estrategia.strategy_turn", run_type="chain")

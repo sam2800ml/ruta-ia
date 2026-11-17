@@ -8,6 +8,7 @@ export default function Estrategia({ readOnly = false }: { readOnly?: boolean })
   const [edit, setEdit] = useState<Record<string, string>>({});
   const [err, setErr] = useState("");
   const [sending, setSending] = useState(false);
+  const [sendingStage, setSendingStage] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const end = useRef<HTMLDivElement>(null);
@@ -32,7 +33,7 @@ export default function Estrategia({ readOnly = false }: { readOnly?: boolean })
   async function send() {
     if (!text.trim() || sending) return;
     const t = text;
-    setText(""); setErr(""); setPending(t); setSending(true);
+    setText(""); setErr(""); setPending(t); setSending(true); setSendingStage(cur);
     try {
       await http("POST", "/strategy/messages", { text: t });
       await load();
@@ -40,7 +41,7 @@ export default function Estrategia({ readOnly = false }: { readOnly?: boolean })
       setErr((e as Error).message);
       setText(t);
     } finally {
-      setSending(false); setPending(null);
+      setSending(false); setPending(null); setSendingStage(null);
     }
   }
 
@@ -53,15 +54,15 @@ export default function Estrategia({ readOnly = false }: { readOnly?: boolean })
         <section>
           <div className="chat" aria-live="polite">
             {msgs.map((m: any, i: number) => <div key={i} className={`bubble ${m.author}`}>{m.text}</div>)}
-            {pending && <div className="bubble user">{pending}</div>}
-            {sending && <div className="bubble assistant"><Spinner /> Pensando…</div>}
+            {pending && sendingStage === cur && <div className="bubble user">{pending}</div>}
+            {sending && sendingStage === cur && <div className="bubble assistant"><Spinner /> Pensando…</div>}
             {props.map((p: any) => (
               <div key={p.id} className="proposal">
                 <small className="muted">Propuesta · {p.kind}{p.basis ? ` · ${p.basis}` : ""}</small>
                 <textarea value={edit[p.id] ?? p.text} onChange={(e) => setEdit({ ...edit, [p.id]: e.target.value })} disabled={readOnly} />
                 {!readOnly && <div>
-                  <button disabled={busy === `save-${p.id}`} onClick={act(`save-${p.id}`, () => http("POST", `/strategy/proposals/${p.id}/save`, { text: edit[p.id] ?? p.text }))}>{busy === `save-${p.id}` && <Spinner />}Guardar</button>{" "}
-                  <button className="secondary" disabled={busy === `discard-${p.id}`} onClick={act(`discard-${p.id}`, () => http("POST", `/strategy/proposals/${p.id}/discard`))}>{busy === `discard-${p.id}` && <Spinner />}Descartar</button>
+                  <button disabled={busy === `prop-${p.id}`} onClick={act(`prop-${p.id}`, () => http("POST", `/strategy/proposals/${p.id}/save`, { text: edit[p.id] ?? p.text }))}>{busy === `prop-${p.id}` && <Spinner />}Guardar</button>{" "}
+                  <button className="secondary" disabled={busy === `prop-${p.id}`} onClick={act(`prop-${p.id}`, () => http("POST", `/strategy/proposals/${p.id}/discard`))}>{busy === `prop-${p.id}` && <Spinner />}Descartar</button>
                 </div>}
               </div>))}
             <div ref={end} />
@@ -70,7 +71,7 @@ export default function Estrategia({ readOnly = false }: { readOnly?: boolean })
           {!done && !readOnly && <div className="compose">
             <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()} placeholder="Escribe tu respuesta…" disabled={sending} />
             <button onClick={send} disabled={sending || !text.trim()}>{sending && <Spinner />}Enviar</button>
-            <button className="secondary" disabled={busy === "complete"} onClick={act("complete", () => http("POST", `/strategy/stages/${cur}/complete`))}>{busy === "complete" && <Spinner />}Completar etapa</button>
+            <button className="secondary" disabled={busy === "complete" || sending} onClick={act("complete", () => http("POST", `/strategy/stages/${cur}/complete`))}>{busy === "complete" && <Spinner />}Completar etapa</button>
           </div>}
           {done && <p className="banner">Estrategia cerrada. Ya puedes trabajar los casos de uso.</p>}
         </section>
