@@ -2,10 +2,9 @@
 
 Implementaciones:
 - StubLLM: determinista, sin red. Sirve para desarrollo y pruebas.
-- AnthropicLLM: usa Claude, con citas nativas (Citations API).
-- OpenAILLM / GroqLLM: comparten la API tipo OpenAI; sin citas nativas, así que se le pide al
-  modelo una cita textual y se verifica contra la fuente antes de aceptar el hallazgo.
-Ninguna acepta evidencia que no exista literalmente en los documentos o transcripciones.
+- AnthropicLLM, OpenAILLM, GroqLLM: bucle agéntico con tool calling nativo (ver agent_tools.py) — el modelo
+  busca evidencia, propone hallazgos, se autocritica, y solo entonces se verifica cada cita contra el texto
+  fuente real (_parse_and_verify). Ninguna acepta evidencia que no exista literalmente en documentos o transcripciones.
 """
 import json
 import re
@@ -19,6 +18,7 @@ except ImportError:
             return fn
         return _decorator
 
+from .agent_tools import PILAR_KEYWORDS, TOOL_DEFS, _find_quote, build_sources, call_tool
 from .config import settings
 
 import os
@@ -28,16 +28,56 @@ def _tracing_ready() -> bool:
     """LANGSMITH_TRACING solo sirve si además hay una clave real: evita tracear sin autenticación."""
     return os.environ.get("LANGSMITH_TRACING", "").lower() == "true" and bool(os.environ.get("LANGSMITH_API_KEY"))
 
-PILAR_KEYWORDS = {
-    "strategy": ["estrategia", "presupuesto", "objetivos", "visión", "dirección"],
-    "infrastructure": ["infraestructura", "nube", "integración", "servidores", "core bancario", "sistemas"],
-    "data": ["datos", "calidad de los datos", "información", "bases de datos"],
-    "governance": ["política", "gobernanza", "riesgo", "ética", "comité", "regulación"],
-    "talent": ["talento", "formación", "capacitación", "habilidades", "equipo técnico"],
-    "culture": ["cultura", "confianza", "experimentación", "resistencia", "cambio"],
-}
+
 NEGATIVE = re.compile(r"\b(no tenemos|no existe|no hay|sin |carece|falta|no contamos)\b", re.I)
 POSITIVE = re.compile(r"\b(contamos con|tenemos|existe una|existe un|cuenta con)\b", re.I)
+
+MAX_TOOL_TURNS = 6
+AGENT_SYSTEM = (
+    "Eres el agente de diagnóstico de adopción de IA. Tienes herramientas para buscar evidencia real en los "
+    "documentos y transcripciones de la empresa: úsalas antes de proponer cualquier hallazgo, nunca inventes "
+    "contenido. Puedes llamar herramientas varias veces. Cuando ya tengas suficiente evidencia, entrega hasta 8 "
+    'hallazgos como un arreglo JSON y nada más, uno por elemento: {"pilar":"...","tipo":"...","titulo":"...",'
+    '"descripcion":"...","cita":"...","indice_fuente":0}. pilar ∈ strategy, infrastructure, data, governance, '
+    "talent, culture. tipo ∈ brecha, fortaleza, contradiccion. Antes de incluir una cita, confírmala con la "
+    "herramienta verificar_cita. No inventes datos que no estén en las fuentes."
+)
+AGENT_CRITIQUE = (
+    "Revisa tu propia lista de hallazgos:\n{draft}\n"
+    "Para cada uno, confirma otra vez que la cita sea textual (puedes volver a usar verificar_cita) y que el pilar "
+    "e índice de fuente sean correctos. Si detectas un pilar importante sin evidencia (usa listar_vacios si hace "
+    "falta), simplemente omite ese hallazgo en vez de inventarlo. Devuelve la lista final corregida en el mismo "
+    "formato JSON, sin texto adicional."
+)
+
+
+def _parse_and_verify(text: str, sources: list) -> list["Candidate"]:
+    """Único lugar donde se interpreta la respuesta final del agente y se verifica cada cita contra la fuente real.
+    Esto es lo que de verdad impide inventar evidencia: no importa qué tan convencido esté el modelo de su propia cita."""
+    try:
+        items = json.loads(text[text.index("["):text.rindex("]") + 1])
+    except (ValueError, json.JSONDecodeError):
+        items = []
+    out: list[Candidate] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        pillar, kind = item.get("pilar"), item.get("tipo")
+        if pillar not in PILAR_KEYWORDS or kind not in ("brecha", "fortaleza", "contradiccion"):
+            continue
+        try:
+            i = int(item.get("indice_fuente"))
+        except (TypeError, ValueError):
+            continue
+        if not (0 <= i < len(sources)):
+            continue
+        stype, sid, src_text, ref = sources[i]
+        found = _find_quote(str(item.get("cita", "")), src_text)
+        if not found:
+            continue
+        out.append(Candidate(kind, pillar, str(item.get("titulo", "")), str(item.get("descripcion", "")),
+                              [{"source_type": stype, "source_id": sid, "quote": found, "ref": ref}]))
+    return out[:8]
 
 
 @dataclass
@@ -74,8 +114,7 @@ class StubLLM(LLM):
 
     def propose_findings(self, fragments, segments):
         out: list[Candidate] = []
-        sources = ([("document", f["id"], f["text"], {"document": f["document"], "page": f["page"]}) for f in fragments] +
-                   [("transcript", s["id"], s["text"], {"transcript": s["transcript"], "start_sec": s["start_sec"]}) for s in segments])
+        sources = build_sources(fragments, segments)
         for stype, sid, text, ref in sources:
             for sent in _sentences(text):
                 low = sent.lower()
@@ -133,31 +172,30 @@ class AnthropicLLM(LLM):
 
     @traceable(name="agente_diagnostico.propose_findings", run_type="chain")
     def propose_findings(self, fragments, segments):
-        """Hallazgos con Citations: cada fragmento o segmento es un documento citable (la cita apunta a su texto exacto)."""
-        sources = ([("document", f["id"], f["text"], {"document": f["document"], "page": f["page"]}) for f in fragments] +
-                   [("transcript", s["id"], s["text"], {"transcript": s["transcript"], "start_sec": s["start_sec"]}) for s in segments])
+        """Bucle agéntico: el modelo busca evidencia con herramientas, propone hallazgos, se autocritica,
+        y solo entonces se verifica cada cita contra el texto fuente real (_parse_and_verify)."""
+        sources = build_sources(fragments, segments)
         if not sources:
             return []
-        blocks = [{"type": "document", "source": {"type": "content", "content": [{"type": "text", "text": t}]},
-                   "title": f"{i}", "citations": {"enabled": True}} for i, (_, _, t, _) in enumerate(sources)]
-        prompt = ("Eres consultor de adopción de IA. Con los documentos dados, lista hasta 8 hallazgos. Una línea por hallazgo con el "
-                  "formato: pilar|tipo|título|descripción. pilar ∈ strategy, infrastructure, data, governance, talent, culture. "
-                  "tipo ∈ brecha, fortaleza, contradiccion. Cada línea debe apoyarse en una cita del texto. No inventes datos.")
-        msg = self.client.messages.create(model=settings.anthropic_model, max_tokens=2000,
-                                          messages=[{"role": "user", "content": blocks + [{"type": "text", "text": prompt}]}])
-        out: list[Candidate] = []
-        for block in msg.content:
-            if getattr(block, "type", "") != "text" or not getattr(block, "citations", None):
-                continue
-            parts = [p.strip() for p in block.text.strip().split("|")]
-            if len(parts) < 4 or parts[0] not in PILAR_KEYWORDS or parts[1] not in ("brecha", "fortaleza", "contradiccion"):
-                continue
-            ev = []
-            for c in block.citations:
-                stype, sid, _, ref = sources[c.document_index]
-                ev.append({"source_type": stype, "source_id": sid, "quote": c.cited_text, "ref": ref})
-            out.append(Candidate(parts[1], parts[0], parts[2], "|".join(parts[3:]), ev))
-        return out
+        tools = [{"name": t["name"], "description": t["description"], "input_schema": t["parameters"]} for t in TOOL_DEFS]
+        msgs = [{"role": "user", "content": f"Hay {len(sources)} fuentes numeradas de [0] a [{len(sources) - 1}]. "
+                 "Investígalas con las herramientas antes de proponer hallazgos."}]
+        draft = ""
+        for _ in range(MAX_TOOL_TURNS):
+            resp = self.client.messages.create(model=settings.anthropic_model, max_tokens=1500,
+                                               system=AGENT_SYSTEM, tools=tools, messages=msgs)
+            tool_uses = [b for b in resp.content if getattr(b, "type", "") == "tool_use"]
+            if not tool_uses:
+                draft = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
+                break
+            msgs.append({"role": "assistant", "content": [b.model_dump() for b in resp.content]})
+            results = [{"type": "tool_result", "tool_use_id": tu.id, "content": json.dumps(call_tool(sources, tu.name, tu.input))}
+                       for tu in tool_uses]
+            msgs.append({"role": "user", "content": results})
+        msgs.append({"role": "user", "content": AGENT_CRITIQUE.format(draft=draft)})
+        critique = self.client.messages.create(model=settings.anthropic_model, max_tokens=1500, system=AGENT_SYSTEM, messages=msgs)
+        final_text = "".join(b.text for b in critique.content if getattr(b, "type", "") == "text") or draft
+        return _parse_and_verify(final_text, sources)
 
     @traceable(name="agente_estrategia.strategy_turn", run_type="chain")
     def strategy_turn(self, stage, context, history, user_message):
@@ -174,17 +212,6 @@ class AnthropicLLM(LLM):
             first, _, rest = text.partition("\n")
             return Turn(rest.strip() or "¿Lo guarda o lo edita?", {"kind": STAGE_KIND[stage], "text": first[10:].strip(), "basis": None})
         return Turn(text)
-
-
-def _find_quote(quote: str, source: str) -> str | None:
-    """Confirma que la cita exista literalmente en la fuente (ignora mayúsculas y espacios de más).
-    Si el modelo no puede señalar un fragmento real, el hallazgo se descarta en vez de inventarlo."""
-    norm = lambda s: re.sub(r"\s+", " ", s).strip()
-    q, s = norm(quote), norm(source)
-    if not q or q.lower() not in s.lower():
-        return None
-    i = s.lower().index(q.lower())
-    return s[i:i + len(q)]
 
 
 class OpenAICompatibleLLM(LLM):
@@ -204,44 +231,36 @@ class OpenAICompatibleLLM(LLM):
 
     @traceable(name="agente_diagnostico.propose_findings", run_type="chain")
     def propose_findings(self, fragments, segments):
-        sources = ([("document", f["id"], f["text"], {"document": f["document"], "page": f["page"]}) for f in fragments] +
-                   [("transcript", s["id"], s["text"], {"transcript": s["transcript"], "start_sec": s["start_sec"]}) for s in segments])
+        """Bucle agéntico vía tool calling nativo: el modelo busca evidencia, propone, se autocritica,
+        y solo entonces se verifica cada cita contra el texto fuente real (_parse_and_verify)."""
+        sources = build_sources(fragments, segments)
         if not sources:
             return []
-        numbered = "\n".join(f"[{i}] {t}" for i, (_, _, t, _) in enumerate(sources))
-        system = ("Eres consultor de adopción de IA. Con las fuentes numeradas que te dan, devuelve hasta 8 hallazgos como un "
-                  "arreglo JSON, sin texto fuera del arreglo. Cada elemento: "
-                  '{"pilar":"...","tipo":"...","titulo":"...","descripcion":"...","cita":"...","indice_fuente":0}. '
-                  "pilar ∈ strategy, infrastructure, data, governance, talent, culture. tipo ∈ brecha, fortaleza, contradiccion. "
-                  "'cita' debe ser una copia EXACTA de un fragmento de la fuente con ese índice, sin parafrasear. "
-                  "No inventes datos que no estén en las fuentes.")
-        resp = self.client.chat.completions.create(model=self.model, max_tokens=2000,
-            messages=[{"role": "system", "content": system}, {"role": "user", "content": numbered}])
-        text = resp.choices[0].message.content or ""
-        try:
-            items = json.loads(text[text.index("["):text.rindex("]") + 1])
-        except (ValueError, json.JSONDecodeError):
-            items = []
-        out: list[Candidate] = []
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            pillar, kind = item.get("pilar"), item.get("tipo")
-            if pillar not in PILAR_KEYWORDS or kind not in ("brecha", "fortaleza", "contradiccion"):
-                continue
-            try:
-                i = int(item.get("indice_fuente"))
-            except (TypeError, ValueError):
-                continue
-            if not (0 <= i < len(sources)):
-                continue
-            stype, sid, src_text, ref = sources[i]
-            found = _find_quote(str(item.get("cita", "")), src_text)
-            if not found:
-                continue
-            out.append(Candidate(kind, pillar, str(item.get("titulo", "")), str(item.get("descripcion", "")),
-                                  [{"source_type": stype, "source_id": sid, "quote": found, "ref": ref}]))
-        return out[:8]
+        tools = [{"type": "function", "function": t} for t in TOOL_DEFS]
+        msgs = [{"role": "system", "content": AGENT_SYSTEM},
+                {"role": "user", "content": f"Hay {len(sources)} fuentes numeradas de [0] a [{len(sources) - 1}]. "
+                 "Investígalas con las herramientas antes de proponer hallazgos."}]
+        draft = ""
+        for _ in range(MAX_TOOL_TURNS):
+            resp = self.client.chat.completions.create(model=self.model, max_tokens=1500, messages=msgs, tools=tools)
+            msg = resp.choices[0].message
+            if not msg.tool_calls:
+                draft = msg.content or ""
+                break
+            msgs.append({"role": "assistant", "content": msg.content,
+                         "tool_calls": [{"id": tc.id, "type": "function",
+                                         "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                                        for tc in msg.tool_calls]})
+            for tc in msg.tool_calls:
+                try:
+                    args = json.loads(tc.function.arguments or "{}")
+                except json.JSONDecodeError:
+                    args = {}
+                msgs.append({"role": "tool", "tool_call_id": tc.id, "content": json.dumps(call_tool(sources, tc.function.name, args))})
+        msgs.append({"role": "user", "content": AGENT_CRITIQUE.format(draft=draft)})
+        critique = self.client.chat.completions.create(model=self.model, max_tokens=1500, messages=msgs)
+        final_text = critique.choices[0].message.content or draft
+        return _parse_and_verify(final_text, sources)
 
     @traceable(name="agente_estrategia.strategy_turn", run_type="chain")
     def strategy_turn(self, stage, context, history, user_message):
@@ -279,5 +298,5 @@ class GroqLLM(OpenAICompatibleLLM):
 _PROVIDERS = {"stub": StubLLM, "anthropic": AnthropicLLM, "openai": OpenAILLM, "groq": GroqLLM}
 
 
-def get_llm() -> LLM:
-    return _PROVIDERS.get(settings.llm_provider, StubLLM)()
+def get_llm(provider: str | None = None) -> LLM:
+    return _PROVIDERS.get(provider or settings.llm_provider, StubLLM)()

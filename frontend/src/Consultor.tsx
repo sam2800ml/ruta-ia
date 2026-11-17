@@ -143,11 +143,27 @@ export function Metodologia() {
 export function Analitica() {
   const [a, setA] = useState<any>(null);
   const [runs, setRuns] = useState<any[]>([]);
+  const [cases, setCases] = useState<any[]>([]);
+  const [bench, setBench] = useState<Record<string, any[]>>({});
+  const [running, setRunning] = useState<string | null>(null);
   const [err, setErr] = useState("");
-  const load = useCallback(async () => { setA(await http("GET", "/admin/analytics")); setRuns(await http("GET", "/eval/runs")); }, []);
+  const load = useCallback(async () => {
+    setA(await http("GET", "/admin/analytics")); setRuns(await http("GET", "/eval/runs"));
+    setCases(await http("GET", "/eval/reference-cases"));
+  }, []);
   useEffect(() => { load().catch((e) => setErr(e.message)); }, [load]);
+  const loadBench = async (caseId: string) => {
+    const rows = await http("GET", `/eval/reference-cases/${caseId}/benchmark`);
+    setBench((b) => ({ ...b, [caseId]: rows }));
+  };
+  useEffect(() => { cases.filter((c) => c.has_inputs).forEach((c) => loadBench(c.id).catch(() => {})); }, [cases]);
   if (!a) return <main className="card">{err ? <p className="error">{err}</p> : <Loading />}</main>;
   const pct = (v: number | null) => (v == null ? "—" : `${Math.round(v * 100)} %`);
+  async function runBenchmark(caseId: string) {
+    setRunning(caseId); setErr("");
+    try { await http("POST", `/eval/reference-cases/${caseId}/benchmark`, { providers: ["groq", "openai", "anthropic"] }); await loadBench(caseId); }
+    catch (e) { setErr((e as Error).message); } finally { setRunning(null); }
+  }
   return (
     <main className="card wide"><h1>Analítica y evaluación</h1>
       <div className="kpis"><div><b>{pct(a.human_control.share)}</b>Informes con aprobación humana</div><div><b>{pct(a.evidence.share)}</b>Hallazgos con evidencia</div>
@@ -155,7 +171,23 @@ export function Analitica() {
       <h3>Propuestas de la IA: aceptadas / editadas / rechazadas</h3>
       <ul>{Object.entries(a.review_proportions).map(([k, v]: any) => <li key={k}>{k}: {v.accept} / {v.edit} / {v.reject} (de {v.total})</li>)}</ul>
       <button onClick={async () => { await http("POST", "/eval/runs"); load(); }}>Congelar corrida de evaluación</button>
-      <ul>{runs.map((r) => <li key={r.id}>{String(r.at).slice(0, 16)} · sistema {r.system_version}</li>)}</ul></main>);
+      <ul>{runs.map((r) => <li key={r.id}>{String(r.at).slice(0, 16)} · sistema {r.system_version}</li>)}</ul>
+
+      <h3>Comparación entre proveedores de IA</h3>
+      {err && <p role="alert" className="error">{err}</p>}
+      {cases.filter((c) => c.has_inputs).length === 0 && <p className="muted">No hay casos de referencia con datos para comparar. Corre <code>python seed_benchmark.py</code>.</p>}
+      {cases.filter((c) => c.has_inputs).map((c) => (
+        <div key={c.id} className="panel">
+          <div className="head2"><strong>{c.name}</strong>
+            <button className="secondary" disabled={running === c.id} onClick={() => runBenchmark(c.id)}>
+              {running === c.id ? "Corriendo…" : "Correr benchmark (Groq, OpenAI, Anthropic)"}</button></div>
+          <table><thead><tr><th>Proveedor</th><th>Modelo</th><th>Segundos</th><th>Hallazgos</th><th>Con cita verificada</th><th>Error</th></tr></thead>
+            <tbody>{(bench[c.id] ?? []).map((r: any) => (
+              <tr key={r.id}><td>{r.provider}</td><td>{r.model ?? "—"}</td><td>{r.seconds}</td><td>{r.findings_count}</td>
+                <td>{r.verified_count} / {r.findings_count}</td><td>{r.error ? <span className="error">{r.error}</span> : "—"}</td></tr>))}
+              {(bench[c.id] ?? []).length === 0 && <tr><td colSpan={6} className="muted">Aún no se ha corrido.</td></tr>}</tbody></table>
+        </div>))}
+    </main>);
 }
 
 export { setViewAs };

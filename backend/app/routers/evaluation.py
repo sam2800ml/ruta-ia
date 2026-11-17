@@ -1,4 +1,5 @@
 import json
+import time
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -8,6 +9,7 @@ from sqlalchemy import text
 from ..config import settings
 from ..deps import NOT_FOUND, Ctx, audit, require_consultant
 from ..indicators import compute
+from ..llm import get_llm
 
 router = APIRouter(prefix="/eval", tags=["evaluation"])
 SYSTEM_VERSION = "0.1.0"
@@ -159,3 +161,55 @@ def run_report(run_id: str, ctx: Ctx = Depends(require_consultant)):
     if not row:
         raise NOT_FOUND
     return {"system_version": row["system_version"], "config": row["config"], "at": row["at"], **row["results"]}
+
+
+class BenchmarkReq(BaseModel):
+    providers: list[str] = ["groq", "openai", "anthropic"]
+
+
+@router.post("/reference-cases/{case_id}/benchmark", status_code=201)
+def benchmark(case_id: str, body: BenchmarkReq, ctx: Ctx = Depends(require_consultant)):
+    """Corre el mismo caso de referencia (sus 'inputs': fragments/segments) por cada proveedor pedido,
+    y guarda costo en segundos, cuántos hallazgos propuso y cuántos pasaron la verificación de cita real."""
+    case = ctx.session.execute(text("select * from reference_case where id = cast(:i as uuid)"), {"i": case_id}).mappings().first()
+    if not case:
+        raise NOT_FOUND
+    fragments = case["inputs"].get("fragments", [])
+    segments = case["inputs"].get("segments", [])
+    if not fragments and not segments:
+        raise HTTPException(status_code=422, detail="Este caso no tiene 'fragments'/'segments' en inputs para evaluar")
+    out = []
+    for provider in body.providers:
+        row = {"provider": provider, "model": None, "findings_count": 0, "verified_count": 0, "findings": [], "error": None}
+        t0 = time.time()
+        try:
+            llm = get_llm(provider)
+            candidates = llm.propose_findings(fragments, segments)
+            row["model"] = getattr(llm, "model", getattr(llm, "name", provider))
+            row["findings_count"] = len(candidates)
+            row["verified_count"] = sum(1 for c in candidates if c.evidence)
+            row["findings"] = [{"pilar": c.pillar, "tipo": c.kind, "titulo": c.title} for c in candidates]
+        except Exception as e:
+            row["error"] = str(e)[:300]
+        row["seconds"] = round(time.time() - t0, 3)
+        rid = uuid.uuid4()
+        ctx.session.execute(text(
+            "insert into benchmark_run(id, case_id, provider, model, seconds, findings_count, verified_count, findings, error, created_by) "
+            "values (:i, cast(:c as uuid), :p, :m, :s, :fc, :vc, cast(:f as jsonb), :e, cast(:u as uuid))"),
+            {"i": rid, "c": case_id, "p": provider, "m": row["model"], "s": row["seconds"], "fc": row["findings_count"],
+             "vc": row["verified_count"], "f": json.dumps(row["findings"]), "e": row["error"], "u": ctx.user_id})
+        audit(ctx, "benchmark.run", "benchmark_run", str(rid), None, provider=provider, case_id=case_id)
+        out.append({**row, "id": str(rid)})
+    return out
+
+
+@router.get("/reference-cases/{case_id}/benchmark")
+def benchmark_history(case_id: str, ctx: Ctx = Depends(require_consultant)):
+    rows = ctx.session.execute(text("select * from benchmark_run where case_id = cast(:i as uuid) order by at desc"), {"i": case_id}).mappings().all()
+    return [dict(r) | {"id": str(r["id"])} for r in rows]
+
+
+@router.get("/reference-cases")
+def reference_cases(ctx: Ctx = Depends(require_consultant)):
+    rows = ctx.session.execute(text("select id, name, system_company_id, inputs, reference, created_at from reference_case order by created_at")).mappings().all()
+    return [dict(r) | {"id": str(r["id"]), "has_inputs": bool(r["inputs"].get("fragments") or r["inputs"].get("segments"))} for r in rows]
