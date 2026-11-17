@@ -28,7 +28,16 @@ export default function Diagnostico({ readOnly = false, onGo }: { readOnly?: boo
 
   const run = (fn: () => Promise<any>, ok = "") => async () => { try { setErr(""); await fn(); setMsg(ok); await load(); } catch (e) { setErr((e as Error).message); } };
 
-  async function addSurvey(e: FormEvent) { e.preventDefault(); await run(() => http("POST", "/surveys", form), "Encuesta enviada")(); }
+  async function addSurvey(e: FormEvent) {
+    e.preventDefault();
+    try {
+      setErr("");
+      await http("POST", "/surveys", form);
+      setMsg("Encuesta enviada");
+      setForm({ role_name: ROLES[0], responsible: "", email: "", deadline: today() });
+      await load();
+    } catch (e) { setErr((e as Error).message); }
+  }
   async function upload(e: ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0]; if (!f) return;
     const fd = new FormData(); fd.append("file", f); fd.append("roles", trRoles);
