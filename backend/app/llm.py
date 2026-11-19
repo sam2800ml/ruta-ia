@@ -170,6 +170,20 @@ class AnthropicLLM(LLM):
             client = wrap_anthropic(client)
         self.client = client
 
+    def _tool_loop(self, msgs: list, tools: list, sources: list) -> str:
+        """Corre turnos de tool calling hasta que el modelo responda con texto plano (sin tool_use)."""
+        for _ in range(MAX_TOOL_TURNS):
+            resp = self.client.messages.create(model=settings.anthropic_model, max_tokens=1500,
+                                               system=AGENT_SYSTEM, tools=tools, messages=msgs)
+            tool_uses = [b for b in resp.content if getattr(b, "type", "") == "tool_use"]
+            if not tool_uses:
+                return "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
+            msgs.append({"role": "assistant", "content": [b.model_dump() for b in resp.content]})
+            results = [{"type": "tool_result", "tool_use_id": tu.id, "content": json.dumps(call_tool(sources, tu.name, tu.input))}
+                       for tu in tool_uses]
+            msgs.append({"role": "user", "content": results})
+        return ""
+
     @traceable(name="agente_diagnostico.propose_findings", run_type="chain")
     def propose_findings(self, fragments, segments):
         """Bucle agéntico: el modelo busca evidencia con herramientas, propone hallazgos, se autocritica,
@@ -180,21 +194,9 @@ class AnthropicLLM(LLM):
         tools = [{"name": t["name"], "description": t["description"], "input_schema": t["parameters"]} for t in TOOL_DEFS]
         msgs = [{"role": "user", "content": f"Hay {len(sources)} fuentes numeradas de [0] a [{len(sources) - 1}]. "
                  "Investígalas con las herramientas antes de proponer hallazgos."}]
-        draft = ""
-        for _ in range(MAX_TOOL_TURNS):
-            resp = self.client.messages.create(model=settings.anthropic_model, max_tokens=1500,
-                                               system=AGENT_SYSTEM, tools=tools, messages=msgs)
-            tool_uses = [b for b in resp.content if getattr(b, "type", "") == "tool_use"]
-            if not tool_uses:
-                draft = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
-                break
-            msgs.append({"role": "assistant", "content": [b.model_dump() for b in resp.content]})
-            results = [{"type": "tool_result", "tool_use_id": tu.id, "content": json.dumps(call_tool(sources, tu.name, tu.input))}
-                       for tu in tool_uses]
-            msgs.append({"role": "user", "content": results})
+        draft = self._tool_loop(msgs, tools, sources)
         msgs.append({"role": "user", "content": AGENT_CRITIQUE.format(draft=draft)})
-        critique = self.client.messages.create(model=settings.anthropic_model, max_tokens=1500, system=AGENT_SYSTEM, messages=msgs)
-        final_text = "".join(b.text for b in critique.content if getattr(b, "type", "") == "text") or draft
+        final_text = self._tool_loop(msgs, tools, sources) or draft
         return _parse_and_verify(final_text, sources)
 
     @traceable(name="agente_estrategia.strategy_turn", run_type="chain")
@@ -229,6 +231,25 @@ class OpenAICompatibleLLM(LLM):
         self.client = client
         self.model = model
 
+    def _tool_loop(self, msgs: list, tools: list, sources: list) -> str:
+        """Corre turnos de tool calling hasta que el modelo responda con texto plano (sin tool_calls)."""
+        for _ in range(MAX_TOOL_TURNS):
+            resp = self.client.chat.completions.create(model=self.model, max_tokens=1500, messages=msgs, tools=tools)
+            msg = resp.choices[0].message
+            if not msg.tool_calls:
+                return msg.content or ""
+            msgs.append({"role": "assistant", "content": msg.content,
+                         "tool_calls": [{"id": tc.id, "type": "function",
+                                         "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                                        for tc in msg.tool_calls]})
+            for tc in msg.tool_calls:
+                try:
+                    args = json.loads(tc.function.arguments or "{}")
+                except json.JSONDecodeError:
+                    args = {}
+                msgs.append({"role": "tool", "tool_call_id": tc.id, "content": json.dumps(call_tool(sources, tc.function.name, args))})
+        return ""
+
     @traceable(name="agente_diagnostico.propose_findings", run_type="chain")
     def propose_findings(self, fragments, segments):
         """Bucle agéntico vía tool calling nativo: el modelo busca evidencia, propone, se autocritica,
@@ -240,27 +261,9 @@ class OpenAICompatibleLLM(LLM):
         msgs = [{"role": "system", "content": AGENT_SYSTEM},
                 {"role": "user", "content": f"Hay {len(sources)} fuentes numeradas de [0] a [{len(sources) - 1}]. "
                  "Investígalas con las herramientas antes de proponer hallazgos."}]
-        draft = ""
-        for _ in range(MAX_TOOL_TURNS):
-            resp = self.client.chat.completions.create(model=self.model, max_tokens=1500, messages=msgs, tools=tools)
-            msg = resp.choices[0].message
-            if not msg.tool_calls:
-                draft = msg.content or ""
-                break
-            msgs.append({"role": "assistant", "content": msg.content,
-                         "tool_calls": [{"id": tc.id, "type": "function",
-                                         "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
-                                        for tc in msg.tool_calls]})
-            for tc in msg.tool_calls:
-                try:
-                    args = json.loads(tc.function.arguments or "{}")
-                except json.JSONDecodeError:
-                    args = {}
-                msgs.append({"role": "tool", "tool_call_id": tc.id, "content": json.dumps(call_tool(sources, tc.function.name, args))})
+        draft = self._tool_loop(msgs, tools, sources)
         msgs.append({"role": "user", "content": AGENT_CRITIQUE.format(draft=draft)})
-        critique = self.client.chat.completions.create(model=self.model, max_tokens=1500, messages=msgs,
-                                                         tools=tools, tool_choice="none")
-        final_text = critique.choices[0].message.content or draft
+        final_text = self._tool_loop(msgs, tools, sources) or draft
         return _parse_and_verify(final_text, sources)
 
     @traceable(name="agente_estrategia.strategy_turn", run_type="chain")
