@@ -258,7 +258,8 @@ class OpenAICompatibleLLM(LLM):
                     args = {}
                 msgs.append({"role": "tool", "tool_call_id": tc.id, "content": json.dumps(call_tool(sources, tc.function.name, args))})
         msgs.append({"role": "user", "content": AGENT_CRITIQUE.format(draft=draft)})
-        critique = self.client.chat.completions.create(model=self.model, max_tokens=1500, messages=msgs)
+        critique = self.client.chat.completions.create(model=self.model, max_tokens=1500, messages=msgs,
+                                                         tools=tools, tool_choice="none")
         final_text = critique.choices[0].message.content or draft
         return _parse_and_verify(final_text, sources)
 

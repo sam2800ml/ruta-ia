@@ -30,7 +30,7 @@ const CONSULTANT_NAV: NavItem[] = [
 ];
 
 function CompanyContent({ tab, readOnly, companyId, onGo }: { tab: string; readOnly: boolean; companyId?: string; onGo: (t: string) => void }) {
-  if (tab === "Documentos") return <Documents readOnly={readOnly} />;
+  if (tab === "Documentos") return <Documents readOnly={readOnly} onGo={onGo} />;
   if (tab === "Diagnóstico") return <Diagnostico readOnly={readOnly} onGo={onGo} />;
   if (tab === "Estrategia") return <Estrategia readOnly={readOnly} />;
   if (tab === "Casos de uso") return <Casos readOnly={readOnly} companyId={companyId} />;

@@ -10,7 +10,7 @@ const FIELD_LABELS: Record<string, string> = {
 };
 const fmtSize = (b: number) => b < 1024 * 1024 ? `${(b / 1024).toFixed(1)} KB` : `${(b / (1024 * 1024)).toFixed(1)} MB`;
 
-export default function Documents({ readOnly = false }: { readOnly?: boolean }) {
+export default function Documents({ readOnly = false, onGo }: { readOnly?: boolean; onGo?: (t: string) => void }) {
   const [opts, setOpts] = useState<Options | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [ready, setReady] = useState<Readiness | null>(null);
@@ -119,7 +119,7 @@ export default function Documents({ readOnly = false }: { readOnly?: boolean }) 
               ...ready.missing_documents.map((t) => opts.document_types[t])].join(", ")}.
           </p>
         )}
-        <button disabled={!ready.can_continue}>Continuar al diagnóstico</button>
+        <button disabled={!ready.can_continue} onClick={() => onGo?.("Diagnóstico")}>Continuar al diagnóstico</button>
       </footer>
     </fieldset></main>
   );
