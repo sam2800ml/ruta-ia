@@ -18,7 +18,7 @@ services:
       - key: RUTA_PUBLIC_URL
         sync: false
       - key: RUTA_LLM_PROVIDER
-        value: stub
+        sync: false   # stub | anthropic | openai | groq — ponlo a mano en el dashboard de Render
       - key: RUTA_ANTHROPIC_API_KEY
         sync: false
       - key: RUTA_OPENAI_API_KEY
