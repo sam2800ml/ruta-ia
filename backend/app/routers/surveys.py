@@ -31,7 +31,8 @@ class NewSurvey(BaseModel):
     deadline: date
 
 
-def _issue_link_and_email(ctx: Ctx, survey_id: str, role: str, email: str, deadline: date, kind: str) -> None:
+def _issue_link_and_email(ctx: Ctx, survey_id: str, role: str, email: str, deadline: date, kind: str) -> str:
+    """No se envía correo: se deja el enlace registrado para que la persona lo copie y lo mande ella misma."""
     raw, h = new_token()
     exp = datetime.combine(deadline, datetime.max.time(), tzinfo=timezone.utc)
     ctx.session.execute(
@@ -45,6 +46,7 @@ def _issue_link_and_email(ctx: Ctx, survey_id: str, role: str, email: str, deadl
         {"c": ctx.company_id, "t": email, "s": subject,
          "b": f"Hola. Responde la encuesta como «{role}» antes del {deadline.isoformat()}: {link}", "k": kind})
     audit(ctx, f"survey.email_{kind}", "survey", survey_id, ctx.company_id, to=email)  # 01-R6: cada correo queda registrado
+    return link
 
 
 @router.post("/surveys", status_code=201)
@@ -63,8 +65,8 @@ def create_survey(body: NewSurvey, ctx: Ctx = Depends(current_ctx)):
              "q": json.dumps(qs)}).scalar_one()
     except Exception:
         raise HTTPException(status_code=409, detail="Ese rol ya tiene una encuesta")
-    _issue_link_and_email(ctx, str(sid), body.role_name, body.email, body.deadline, "invitation")
-    return {"id": str(sid), "role_name": body.role_name, "status": "pending", "questions": len(qs)}
+    link = _issue_link_and_email(ctx, str(sid), body.role_name, body.email, body.deadline, "invitation")
+    return {"id": str(sid), "role_name": body.role_name, "status": "pending", "questions": len(qs), "link": link}
 
 
 def _surveys(ctx: Ctx, cid: str) -> list[dict]:
@@ -91,9 +93,9 @@ def remind_one(survey_id: str, ctx: Ctx = Depends(current_ctx)):
     if not s:
         raise NOT_FOUND
     if s["status"] == "complete":
-        return {"sent": 0}  # no duplica ni toca respuestas ya completas
-    _issue_link_and_email(ctx, str(s["id"]), s["role_name"], s["email"], max(s["deadline"], date.today()), "reminder")
-    return {"sent": 1}
+        return {"sent": 0, "link": None}  # no duplica ni toca respuestas ya completas
+    link = _issue_link_and_email(ctx, str(s["id"]), s["role_name"], s["email"], max(s["deadline"], date.today()), "reminder")
+    return {"sent": 1, "role_name": s["role_name"], "email": s["email"], "link": link}
 
 
 @router.post("/surveys/remind-pending")
@@ -102,9 +104,10 @@ def remind_all(ctx: Ctx = Depends(current_ctx)):
     rows = ctx.session.execute(
         text("select id, role_name, email, deadline from survey where status='pending' and company_id = cast(:c as uuid)"),
         {"c": cid}).mappings().all()
-    for s in rows:
-        _issue_link_and_email(ctx, str(s["id"]), s["role_name"], s["email"], max(s["deadline"], date.today()), "reminder")
-    return {"sent": len(rows)}
+    links = [{"role_name": s["role_name"], "email": s["email"],
+              "link": _issue_link_and_email(ctx, str(s["id"]), s["role_name"], s["email"], max(s["deadline"], date.today()), "reminder")}
+             for s in rows]
+    return {"sent": len(links), "links": links}
 
 
 def _is_uuid(v: str) -> bool:

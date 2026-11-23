@@ -27,8 +27,9 @@ def invite_company(body: NewCompany, ctx: Ctx = Depends(require_consultant)):
     s.execute(text("insert into invitation(company_id, email, token_hash, expires_at) values (:c,:e,:h,:x)"),
               {"c": cid, "e": body.admin_email, "h": h, "x": exp})
     audit(ctx, "company.invited", "company", str(cid), str(cid), email=body.admin_email)
-    # El envío real del correo llega con la Feature 03; mientras tanto el token se devuelve al consultor.
-    return {"id": str(cid), "status": "invited", "invitation_token": raw}
+    # No se envía correo: el consultor copia el enlace y se lo manda él mismo a admin_email.
+    link = f"{settings.public_url}/?invitacion={raw}"
+    return {"id": str(cid), "status": "invited", "invitation_token": raw, "link": link, "email": body.admin_email}
 
 
 @router.get("")

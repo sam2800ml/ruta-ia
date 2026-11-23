@@ -17,6 +17,7 @@ export default function Diagnostico({ readOnly = false, onGo }: { readOnly?: boo
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [loaded, setLoaded] = useState(false);
+  const [pendingLinks, setPendingLinks] = useState<{ role_name: string; email: string; link: string }[]>([]);
 
   const load = useCallback(async () => {
     const [a, b, c, d, e] = await Promise.all([http("GET", "/surveys"), http("GET", "/transcripts"), http("GET", "/consent"), http("GET", "/reports/state"), http("GET", "/outbox")]);
@@ -31,10 +32,26 @@ export default function Diagnostico({ readOnly = false, onGo }: { readOnly?: boo
   async function addSurvey(e: FormEvent) {
     e.preventDefault();
     try {
-      setErr("");
-      await http("POST", "/surveys", form);
-      setMsg("Encuesta enviada");
+      setErr(""); setMsg("");
+      const r = await http("POST", "/surveys", form);
+      setPendingLinks([{ role_name: form.role_name, email: form.email, link: r.link }]);
       setForm({ role_name: ROLES[0], responsible: "", email: "", deadline: today() });
+      await load();
+    } catch (e) { setErr((e as Error).message); }
+  }
+  async function remindOne(id: string) {
+    try {
+      setErr(""); setMsg("");
+      const r = await http("POST", `/surveys/${id}/reminder`);
+      setPendingLinks(r.link ? [{ role_name: r.role_name, email: r.email, link: r.link }] : []);
+      await load();
+    } catch (e) { setErr((e as Error).message); }
+  }
+  async function remindAll() {
+    try {
+      setErr(""); setMsg("");
+      const r = await http("POST", "/surveys/remind-pending");
+      setPendingLinks(r.links ?? []);
       await load();
     } catch (e) { setErr((e as Error).message); }
   }
@@ -69,11 +86,15 @@ export default function Diagnostico({ readOnly = false, onGo }: { readOnly?: boo
               <tr key={s.id}>
                 <td>{s.role_name}</td><td>{s.responsible}</td><td>{s.email}</td>
                 <td><span className={`pill ${s.status === "complete" ? "processed" : ""}`}>{s.status === "complete" ? "Completa" : "Pendiente"}</span></td>
-                <td>{s.status === "pending" && <button className="link" onClick={run(() => http("POST", `/surveys/${s.id}/reminder`), "Recordatorio enviado")}>Reenviar</button>}</td>
+                <td>{s.status === "pending" && <button className="link" onClick={() => remindOne(s.id)}>Reenviar</button>}</td>
               </tr>))}
               {sv.surveys.length === 0 && <tr><td colSpan={5} className="muted">Aún no hay encuestas.</td></tr>}</tbody>
           </table>
-          {sv.surveys.some((s: any) => s.status === "pending") && <button className="secondary" onClick={run(() => http("POST", "/surveys/remind-pending"), "Recordatorios enviados")}>Reenviar a todos los pendientes</button>}
+          {sv.surveys.some((s: any) => s.status === "pending") && <button className="secondary" onClick={remindAll}>Reenviar a todos los pendientes</button>}
+          {pendingLinks.length > 0 && <div className="banner" role="status">
+            <p>No se envía correo: copia este enlace y envíaselo tú a cada persona.</p>
+            <ul className="docs">{pendingLinks.map((p) => <li key={p.email}><span><b>{p.role_name}</b> · {p.email}<br /><code>{p.link}</code></span></li>)}</ul>
+          </div>}
         </Section>
 
         <Section title="Transcripciones de reuniones">
@@ -100,7 +121,7 @@ export default function Diagnostico({ readOnly = false, onGo }: { readOnly?: boo
         </Section>
       </fieldset>
 
-      <details><summary className="muted">Bandeja de salida (modo prueba: los correos quedan en cola)</summary>
+      <details><summary className="muted">Bandeja de salida (histórico: los correos no se envían, quedan aquí)</summary>
         <ul className="docs">{mails.map((m) => <li key={m.id}><span><small className="muted">{m.to_email}</small><br />{m.body}</span></li>)}</ul></details>
 
       {state?.published && <Informe readOnly={readOnly} onGo={onGo} />}

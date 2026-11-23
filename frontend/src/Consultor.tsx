@@ -7,7 +7,7 @@ export function Empresas({ onView }: { onView: (id: string, name: string) => voi
   const [rows, setRows] = useState<any[]>([]);
   const [q, setQ] = useState("");
   const [f, setF] = useState({ name: "", nit: "", admin_email: "" });
-  const [tok, setTok] = useState("");
+  const [invite_, setInvite] = useState<{ link: string; email: string } | null>(null);
   const [err, setErr] = useState("");
   const load = useCallback(async () => {
     setDash(await http("GET", "/admin/dashboard")); setRows(await http("GET", `/admin/companies?q=${encodeURIComponent(q)}`));
@@ -15,7 +15,7 @@ export function Empresas({ onView }: { onView: (id: string, name: string) => voi
   useEffect(() => { load().catch((e) => setErr(e.message)); }, [load]);
   async function invite(e: FormEvent) {
     e.preventDefault();
-    try { setErr(""); const r = await http("POST", "/companies", { ...f, nit: f.nit || null }); setTok(r.invitation_token); setF({ name: "", nit: "", admin_email: "" }); load(); } catch (x) { setErr((x as Error).message); }
+    try { setErr(""); const r = await http("POST", "/companies", { ...f, nit: f.nit || null }); setInvite({ link: r.link, email: r.email }); setF({ name: "", nit: "", admin_email: "" }); load(); } catch (x) { setErr((x as Error).message); }
   }
   if (!dash) return <main className="card wide">{err ? <p className="error">{err}</p> : <Loading />}</main>;
   return (
@@ -29,7 +29,7 @@ export function Empresas({ onView }: { onView: (id: string, name: string) => voi
         <label>NIT<input value={f.nit} onChange={(e) => setF({ ...f, nit: e.target.value })} /></label>
         <label>Correo del administrador<input required type="email" value={f.admin_email} onChange={(e) => setF({ ...f, admin_email: e.target.value })} /></label>
         <div><button type="submit">Invitar empresa</button></div></form>
-      {tok && <p className="banner" role="status">Enlace de invitación (aún no se envía por correo): <code id="invite-token">{tok}</code></p>}
+      {invite_ && <p className="banner" role="status">Este es el link para <b>{invite_.email}</b>, envíaselo tú: <code id="invite-token">{invite_.link}</code></p>}
       {err && <p role="alert" className="error">{err}</p>}
 
       <div className="two">

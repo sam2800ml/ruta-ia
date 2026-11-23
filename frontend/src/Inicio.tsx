@@ -39,6 +39,7 @@ export default function Inicio({ onGo }: { onGo: (tab: string) => void }) {
   const [data, setData] = useState<any>(null);
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
+  const [links, setLinks] = useState<{ role_name: string; email: string; link: string }[]>([]);
 
   const load = useCallback(async () => {
     const [{ profile, readiness }, documents, surveys, reportState, strategy, useCases, activity] = await Promise.all([
@@ -88,7 +89,7 @@ export default function Inicio({ onGo }: { onGo: (tab: string) => void }) {
     next = { title: `Falta${pendingSurveys.length === 1 ? "" : "n"} ${pendingSurveys.length} rol${pendingSurveys.length === 1 ? "" : "es"} por responder la encuesta`,
       desc: `${names} aún no responde${pendingSurveys.length === 1 ? "" : "n"}. La fecha límite es el ${deadline}.`,
       cta: "Ir al diagnóstico", tab: "Diagnóstico",
-      extra: { label: "Enviar recordatorio", fn: () => http("POST", "/surveys/remind-pending") } };
+      extra: { label: "Generar enlaces de recordatorio", fn: () => http("POST", "/surveys/remind-pending") } };
   } else if (!reportState.latest) {
     next = { title: "Genera el diagnóstico", desc: "Ya tienes respuestas suficientes para generarlo.", cta: "Ir al diagnóstico", tab: "Diagnóstico" };
   } else if (reportState.latest.status === "generating") {
@@ -103,7 +104,9 @@ export default function Inicio({ onGo }: { onGo: (tab: string) => void }) {
     next = { title: "Registra tus primeros casos de uso", desc: "Prioriza oportunidades de IA según impacto y complejidad.", cta: "Ir a casos de uso", tab: "Casos de uso" };
   }
 
-  const runExtra = async (fn: () => Promise<any>) => { try { await fn(); setMsg("Recordatorio enviado"); await load(); } catch (e) { setErr((e as Error).message); } };
+  const runExtra = async (fn: () => Promise<any>) => {
+    try { setErr(""); const r = await fn(); setLinks(r.links ?? []); await load(); } catch (e) { setErr((e as Error).message); }
+  };
 
   return (
     <main className="home">
@@ -134,6 +137,10 @@ export default function Inicio({ onGo }: { onGo: (tab: string) => void }) {
             <button onClick={() => onGo(next!.tab)}>{next.cta}</button>
             {next.extra && <button className="secondary" onClick={() => runExtra(next!.extra!.fn)}>{next.extra.label}</button>}
           </div>
+          {links.length > 0 && <div className="banner" role="status">
+            <p>No se envía correo: copia este enlace y envíaselo tú a cada persona.</p>
+            <ul className="docs">{links.map((p) => <li key={p.email}><span><b>{p.role_name}</b> · {p.email}<br /><code>{p.link}</code></span></li>)}</ul>
+          </div>}
         </div>
       )}
 
