@@ -165,7 +165,8 @@ def run_report(run_id: str, ctx: Ctx = Depends(require_consultant)):
 
 class BenchmarkReq(BaseModel):
     # Todos corren sobre Groq; lo que varía es el modelo (ver https://console.groq.com/docs/models).
-    models: list[str] = ["llama-3.1-8b-instant", "llama-3.3-70b-versatile", "openai/gpt-oss-20b", "openai/gpt-oss-120b"]
+    # Los llama-* de producción están marcados "Enterprise" en Groq (solo con plan especial): se dejan fuera del default.
+    models: list[str] = ["openai/gpt-oss-20b", "openai/gpt-oss-120b", "qwen/qwen3.8-27b"]
 
 
 @router.post("/reference-cases/{case_id}/benchmark", status_code=201)
