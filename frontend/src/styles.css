@@ -39,6 +39,9 @@ fieldset.plain{border:0;padding:0;margin:0;min-width:0}
 .kpis div{border:1px solid #ddd;border-radius:6px;padding:.75rem}.kpis b{display:block;font-size:1.6rem}
 table{width:100%;border-collapse:collapse}
 .banner{background:#eef4ff;border-radius:6px;padding:.5rem .75rem}.viewas{margin:0;border-radius:0}
+.bench-row{display:flex;gap:1rem;align-items:center;padding:.5rem;cursor:pointer;list-style:none}
+.bench-row span{flex:1}.bench-row span:first-child{flex:0 0 auto;color:var(--muted);font-size:.9em}
+details > .docs{padding:0 .5rem .5rem}details > p{padding:0 .5rem .5rem;margin:0}
 .locked{background:#f6f6f6;border-radius:6px;padding:1rem}
 .stepper{display:flex;gap:.5rem;list-style:none;padding:0;flex-wrap:wrap}.stepper li{padding:.3rem .7rem;border-radius:99px;background:#eee;font-size:.85rem;cursor:pointer}
 .stepper li.current,.stepper li.in_progress{background:var(--accent);color:#fff}.stepper li.done,.stepper li.completed{background:#15803d;color:#fff}

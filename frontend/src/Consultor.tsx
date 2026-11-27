@@ -174,6 +174,11 @@ export function Analitica() {
       <ul>{runs.map((r) => <li key={r.id}>{String(r.at).slice(0, 16)} · sistema {r.system_version}</li>)}</ul>
 
       <h3>Comparación entre modelos de Groq</h3>
+      <p className="muted">Cada fila es una corrida del mismo caso de referencia con un modelo distinto. <b>Hallazgos</b> es cuántas propuestas del
+        modelo lograron pasar la verificación: antes de contar algo como hallazgo, el sistema confirma que la cita exista textual en el documento
+        o transcripción de origen — por eso <b>«Con cita verificada»</b> siempre va a coincidir con «Hallazgos» (nada se cuenta si no se verificó).
+        Un modelo con 0 hallazgos no se «cayó»: corrió bien, pero no logró producir ninguna cita textual verificable. Haz clic en una fila para ver
+        el pilar, el tipo y el texto exacto de cada hallazgo.</p>
       {err && <p role="alert" className="error">{err}</p>}
       {cases.filter((c) => c.has_inputs).length === 0 && <p className="muted">No hay casos de referencia con datos para comparar. Corre <code>python seed_benchmark.py</code>.</p>}
       {cases.filter((c) => c.has_inputs).map((c) => (
@@ -181,10 +186,25 @@ export function Analitica() {
           <div className="head2"><strong>{c.name}</strong>
             <button className="secondary" disabled={running === c.id} onClick={() => runBenchmark(c.id)}>
               {running === c.id ? "Corriendo…" : "Correr benchmark (modelos de Groq)"}</button></div>
-          <table><thead><tr><th>Modelo</th><th>Segundos</th><th>Hallazgos</th><th>Con cita verificada</th><th>Error</th></tr></thead>
+          <table><thead><tr><th>Cuándo</th><th>Modelo</th><th>Segundos</th><th>Hallazgos</th><th>Error</th></tr></thead>
             <tbody>{(bench[c.id] ?? []).map((r: any) => (
-              <tr key={r.id}><td>{r.model ?? "—"}</td><td>{r.seconds}</td><td>{r.findings_count}</td>
-                <td>{r.verified_count} / {r.findings_count}</td><td>{r.error ? <span className="error">{r.error}</span> : "—"}</td></tr>))}
+              <tr key={r.id}>
+                <td colSpan={5} style={{ padding: 0 }}>
+                  <details>
+                    <summary className="bench-row">
+                      <span>{r.at ? new Date(r.at).toLocaleString("es-CO", { dateStyle: "short", timeStyle: "short" }) : "—"}</span>
+                      <span>{r.model ?? "—"}</span><span>{r.seconds} s</span>
+                      <span>{r.findings_count} hallazgo{r.findings_count === 1 ? "" : "s"}</span>
+                      <span>{r.error ? <span className="error">{r.error}</span> : "—"}</span>
+                    </summary>
+                    {r.findings_count > 0 ? (
+                      <ul className="docs">{r.findings.map((f: any, i: number) => (
+                        <li key={i}><span><b>{f.pilar}</b> · {f.tipo}<br />{f.titulo}
+                          {f.citas?.map((cita: string, j: number) => <div key={j}><small className="muted">«{cita}»</small></div>)}</span></li>))}</ul>
+                    ) : <p className="muted">Ningún hallazgo con cita verificable en esta corrida.</p>}
+                  </details>
+                </td>
+              </tr>))}
               {(bench[c.id] ?? []).length === 0 && <tr><td colSpan={5} className="muted">Aún no se ha corrido.</td></tr>}</tbody></table>
         </div>))}
     </main>);

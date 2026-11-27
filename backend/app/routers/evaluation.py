@@ -189,7 +189,8 @@ def benchmark(case_id: str, body: BenchmarkReq, ctx: Ctx = Depends(require_consu
             candidates = llm.propose_findings(fragments, segments)
             row["findings_count"] = len(candidates)
             row["verified_count"] = sum(1 for c in candidates if c.evidence)
-            row["findings"] = [{"pilar": c.pillar, "tipo": c.kind, "titulo": c.title} for c in candidates]
+            row["findings"] = [{"pilar": c.pillar, "tipo": c.kind, "titulo": c.title, "descripcion": c.description,
+                                "citas": [e["quote"] for e in c.evidence]} for c in candidates]
         except Exception as e:
             row["error"] = str(e)[:300]
         row["seconds"] = round(time.time() - t0, 3)
