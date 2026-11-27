@@ -164,12 +164,13 @@ def run_report(run_id: str, ctx: Ctx = Depends(require_consultant)):
 
 
 class BenchmarkReq(BaseModel):
-    providers: list[str] = ["groq", "openai", "anthropic"]
+    # Todos corren sobre Groq; lo que varía es el modelo (ver https://console.groq.com/docs/models).
+    models: list[str] = ["llama-3.1-8b-instant", "llama-3.3-70b-versatile", "openai/gpt-oss-20b", "openai/gpt-oss-120b"]
 
 
 @router.post("/reference-cases/{case_id}/benchmark", status_code=201)
 def benchmark(case_id: str, body: BenchmarkReq, ctx: Ctx = Depends(require_consultant)):
-    """Corre el mismo caso de referencia (sus 'inputs': fragments/segments) por cada proveedor pedido,
+    """Corre el mismo caso de referencia (sus 'inputs': fragments/segments) con cada modelo de Groq pedido,
     y guarda costo en segundos, cuántos hallazgos propuso y cuántos pasaron la verificación de cita real."""
     case = ctx.session.execute(text("select * from reference_case where id = cast(:i as uuid)"), {"i": case_id}).mappings().first()
     if not case:
@@ -179,13 +180,12 @@ def benchmark(case_id: str, body: BenchmarkReq, ctx: Ctx = Depends(require_consu
     if not fragments and not segments:
         raise HTTPException(status_code=422, detail="Este caso no tiene 'fragments'/'segments' en inputs para evaluar")
     out = []
-    for provider in body.providers:
-        row = {"provider": provider, "model": None, "findings_count": 0, "verified_count": 0, "findings": [], "error": None}
+    for model in body.models:
+        row = {"provider": "groq", "model": model, "findings_count": 0, "verified_count": 0, "findings": [], "error": None}
         t0 = time.time()
         try:
-            llm = get_llm(provider)
+            llm = get_llm("groq", model)
             candidates = llm.propose_findings(fragments, segments)
-            row["model"] = getattr(llm, "model", getattr(llm, "name", provider))
             row["findings_count"] = len(candidates)
             row["verified_count"] = sum(1 for c in candidates if c.evidence)
             row["findings"] = [{"pilar": c.pillar, "tipo": c.kind, "titulo": c.title} for c in candidates]
@@ -196,9 +196,9 @@ def benchmark(case_id: str, body: BenchmarkReq, ctx: Ctx = Depends(require_consu
         ctx.session.execute(text(
             "insert into benchmark_run(id, case_id, provider, model, seconds, findings_count, verified_count, findings, error, created_by) "
             "values (:i, cast(:c as uuid), :p, :m, :s, :fc, :vc, cast(:f as jsonb), :e, cast(:u as uuid))"),
-            {"i": rid, "c": case_id, "p": provider, "m": row["model"], "s": row["seconds"], "fc": row["findings_count"],
+            {"i": rid, "c": case_id, "p": "groq", "m": model, "s": row["seconds"], "fc": row["findings_count"],
              "vc": row["verified_count"], "f": json.dumps(row["findings"]), "e": row["error"], "u": ctx.user_id})
-        audit(ctx, "benchmark.run", "benchmark_run", str(rid), None, provider=provider, case_id=case_id)
+        audit(ctx, "benchmark.run", "benchmark_run", str(rid), None, model=model, case_id=case_id)
         out.append({**row, "id": str(rid)})
     return out
 

@@ -295,12 +295,13 @@ class GroqLLM(OpenAICompatibleLLM):
     name = "groq"
     base_url = "https://api.groq.com/openai/v1"
 
-    def __init__(self):
-        super().__init__(settings.groq_api_key, settings.groq_model)
+    def __init__(self, model: str | None = None):
+        super().__init__(settings.groq_api_key, model or settings.groq_model)
 
 
 _PROVIDERS = {"stub": StubLLM, "anthropic": AnthropicLLM, "openai": OpenAILLM, "groq": GroqLLM}
 
 
-def get_llm(provider: str | None = None) -> LLM:
-    return _PROVIDERS.get(provider or settings.llm_provider, StubLLM)()
+def get_llm(provider: str | None = None, model: str | None = None) -> LLM:
+    cls = _PROVIDERS.get(provider or settings.llm_provider, StubLLM)
+    return cls(model) if cls is GroqLLM else cls()

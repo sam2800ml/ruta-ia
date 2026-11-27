@@ -6,7 +6,7 @@ export default function Invitation({ token, onDone }: { token: string; onDone: (
   const [err, setErr] = useState("");
   async function submit(e: FormEvent) {
     e.preventDefault();
-    try { const r = await http("POST", "/auth/accept-invitation", { token, password: pw }); setSession(r.access_token, r.role); history.replaceState(null, "", "/"); onDone(); }
+    try { const r = await http("POST", "/auth/accept-invitation", { token, password: pw }); setSession(r.access_token, r.role); history.replaceState(null, "", import.meta.env.BASE_URL); onDone(); }
     catch (x) { setErr((x as Error).message); }
   }
   return (
